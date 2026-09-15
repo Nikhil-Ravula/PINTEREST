@@ -178,12 +178,12 @@ class Command(BaseCommand):
         )
 
         client = genai.Client(api_key=api_key)
-        retries = max(1, getattr(settings, "GEMINI_RETRIES", 5))
+        retries = max(1, getattr(settings, "GEMINI_RETRIES", 6))
         copy = None
         for attempt in range(retries):
             try:
                 response = client.models.generate_content(
-                    model=getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash"),
+                    model=getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash"),
                     contents=user_prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=GEMINI_SYSTEM_PROMPT,
@@ -202,12 +202,12 @@ class Command(BaseCommand):
                 error_text = str(exc).lower()
                 transient = any(
                     marker in error_text
-                    for marker in ("503", "429", "unavailable", "resource_exhausted", "temporarily")
+                    for marker in ("503", "429", "unavailable", "resource_exhausted", "temporarily", "overloaded")
                 )
                 if not transient or attempt == retries - 1:
                     raise CommandError(f"Gemini request failed: {exc}") from exc
-                delay = 5 * (2 ** attempt)  # 5s, 10s, 20s, 40s ...
-                self.stdout.write(f"Gemini is temporarily busy; retrying in {delay}s (attempt {attempt + 1}/{retries})...")
+                delay = 15 * (2 ** attempt)  # 15s, 30s, 60s, 120s, 240s ...
+                self.stdout.write(f"Gemini is busy (503); retrying in {delay}s (attempt {attempt + 1}/{retries})...")
                 time.sleep(delay)
 
         if copy is None:
