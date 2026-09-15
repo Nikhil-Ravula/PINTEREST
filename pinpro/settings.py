@@ -25,6 +25,7 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.6-flash')
 GEMINI_RETRIES = int(os.getenv('GEMINI_RETRIES', '3'))
 AMAZON_REGION = os.getenv('AMAZON_REGION', 'US')
+SCRAPER_API_KEY = os.getenv('SCRAPER_API_KEY', '')
 
 
 # Quick-start development settings - unsuitable for production

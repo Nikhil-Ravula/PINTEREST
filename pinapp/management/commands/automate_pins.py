@@ -324,8 +324,30 @@ class Command(BaseCommand):
         """Scrape products from a specific Amazon URL."""
         return self._fetch_and_parse_amazon(url, "Direct URL", limit, domain)
 
+    def _scraper_api_url(self, target_url):
+        """Wrap a URL through ScraperAPI if an API key is configured."""
+        api_key = getattr(settings, "SCRAPER_API_KEY", "")
+        if not api_key:
+            return None
+        encoded = quote_plus(target_url)
+        return f"https://api.scraperapi.com/?api_key={api_key}&url={encoded}&render=false"
+
     def _fetch_and_parse_amazon(self, url, topic, limit, domain):
-        """Core Amazon fetch + parse logic with CAPTCHA retry."""
+        """Core Amazon fetch + parse logic with ScraperAPI + direct retry."""
+        # --- Try ScraperAPI first (bypasses IP blocks) ---
+        scraper_url = self._scraper_api_url(url)
+        if scraper_url:
+            try:
+                response = requests.get(scraper_url, timeout=60)
+                response.raise_for_status()
+                if not self._is_captcha_page(response.text):
+                    products = self._extract_products(response.text, topic, limit, domain)
+                    if products:
+                        return products
+            except requests.RequestException:
+                pass  # Fall through to direct requests
+
+        # --- Direct requests fallback (works on home internet, not servers) ---
         max_attempts = 3
         for attempt in range(max_attempts):
             session = self._build_session()
@@ -351,8 +373,7 @@ class Command(BaseCommand):
                     )
                     continue
                 raise CommandError(
-                    "Amazon is showing CAPTCHA. Try again later, use a different network, "
-                    "or provide a direct Amazon product URL with --amazon-url."
+                    "Amazon is showing CAPTCHA. Set SCRAPER_API_KEY in .env to bypass this."
                 )
 
             # Parse the page
@@ -366,8 +387,9 @@ class Command(BaseCommand):
 
         raise CommandError(
             "Amazon returned no parseable products. Amazon may have blocked the request. "
-            "Try --topic with another query or provide a direct --amazon-url."
+            "Set SCRAPER_API_KEY in .env to fix this on server environments."
         )
+
 
     def _extract_products(self, html, topic, limit, domain):
         """Extract product data from Amazon search results HTML."""
