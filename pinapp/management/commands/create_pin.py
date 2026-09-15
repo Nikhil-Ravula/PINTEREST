@@ -183,7 +183,7 @@ class Command(BaseCommand):
         for attempt in range(retries):
             try:
                 response = client.models.generate_content(
-                    model=getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash"),
+                    model=getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash"),
                     contents=user_prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=GEMINI_SYSTEM_PROMPT,
