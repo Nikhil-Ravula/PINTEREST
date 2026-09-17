@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pin Orbit | Command Center</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+    :root{--bg:#f4f0e9;--ink:#17211f;--muted:#71807d;--panel:#fffdf9;--line:#d9ddd5;--green:#c9ef72;--orange:#f36f4f;--teal:#a6d8d0;--shadow:0 22px 60px rgba(38,52,45,.12)}
+    *{box-sizing:border-box}html{background:var(--bg)}
+    body{margin:0;color:var(--ink);font-family:'Manrope',sans-serif;background:radial-gradient(circle at 82% 0,#dceecf 0,transparent 28%),radial-gradient(circle at 0 72%,#e7f1e8 0,transparent 25%),var(--bg)}
+    a{text-decoration:none;color:inherit}button{font:inherit;cursor:pointer}
+    @keyframes drift{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-5px) rotate(-5deg)}}
+    @keyframes breathe{0%,100%{box-shadow:0 0 0 14px rgba(243,111,79,.13),0 12px 35px rgba(0,0,0,.35)}50%{box-shadow:0 0 0 22px rgba(243,111,79,.04),0 16px 42px rgba(0,0,0,.4)}}
+    @keyframes spin{to{transform:translate(-50%,-50%) rotateX(67deg) rotateZ(348deg)}}
+    @keyframes float{0%,100%{margin-top:0}50%{margin-top:-7px}}
+    @keyframes reveal{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    .layout{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:100vh}
+    .sidebar{display:flex;flex-direction:column;padding:28px 20px;border-right:1px solid var(--line);background:rgba(255,253,249,.46)}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:-.05em;font-size:19px}
+    .logo{width:31px;height:31px;display:grid;place-items:center;border-radius:11px 11px 11px 4px;background:var(--ink);color:var(--green);font-size:14px;transform:rotate(-8deg);box-shadow:4px 4px 0 var(--orange);animation:drift 4s ease-in-out infinite}
+    .nav-label{margin:48px 12px 12px;color:var(--muted);font:500 9px 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase}
+    nav{display:grid;gap:4px}
+    .nav{width:100%;display:flex;align-items:center;gap:12px;padding:11px 12px;border:0;border-radius:10px;background:transparent;color:var(--muted);text-align:left;font-size:12px;transition:.2s}
+    .nav:hover,.nav.active{background:var(--ink);color:var(--green)}
+    .nav i{width:18px;font-style:normal;font-size:15px;text-align:center}
+    .sidebar-foot{margin-top:auto;display:grid;gap:14px}
+    .bot-card{padding:13px;border:1px solid #bdd88d;border-radius:12px;background:#e9f6c9}
+    .micro{color:var(--muted);font:500 9px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase}
+    .bot-row{display:flex;align-items:center;justify-content:space-between;margin-top:9px;font-size:11px}
+    .live{color:#568029;font:500 10px 'DM Mono',monospace}.live:before{content:'';display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#79b330}
+    .user{display:flex;gap:9px;align-items:center;padding:0 4px;color:var(--muted);font-size:11px}
+    .avatar{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--orange);color:white;font-size:10px;font-weight:800}
+    main{min-width:0;padding:28px clamp(20px,4vw,60px) 50px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:46px}
+    .crumb{color:var(--muted);font:500 10px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase}
+    .crumb b{color:var(--orange);font-weight:500}
+    .top-actions{display:flex;gap:9px;align-items:center}
+    .btn-icon{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--line);border-radius:50%;background:rgba(255,255,255,.45);color:var(--ink);font-size:14px;transition:.2s}
+    .btn-icon:hover{border-color:var(--orange);color:var(--orange);transform:translateY(-2px)}
+    .btn-primary{border:0;border-radius:9px;padding:10px 15px;background:var(--ink);color:var(--green);font-size:11px;font-weight:800;transition:.2s}
+    .btn-primary:hover{background:var(--orange);color:white}
+    .hero{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(400px,1.15fr);gap:40px;align-items:stretch;margin-bottom:36px}
+    .hero-copy{display:flex;flex-direction:column;justify-content:center;padding:6px 0}
+    .kicker{color:var(--orange);font:500 10px 'DM Mono',monospace;letter-spacing:.15em;text-transform:uppercase}
+    h1{max-width:480px;margin:13px 0 17px;font-size:clamp(3rem,6vw,6rem);line-height:.88;letter-spacing:-.09em;font-weight:800}
+    h1 span{color:var(--orange)}
+    .lead{max-width:400px;margin:0 0 22px;color:var(--muted);font-size:13px;line-height:1.75}
+    .lead strong{color:var(--ink)}
+    .quick-cmds{display:flex;flex-wrap:wrap;gap:7px}
+    .qcmd{padding:7px 12px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.5);font:500 10px 'DM Mono',monospace;color:var(--ink)}
+    .orbit-card{position:relative;min-height:360px;overflow:hidden;border:1px solid #cfd8cf;border-radius:20px;background:linear-gradient(145deg,#263c38,#152522);box-shadow:var(--shadow)}
+    .orbit-card:before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,rgba(201,239,114,.12),transparent 36%,rgba(166,216,208,.16));pointer-events:none}
+    .orbit-label{position:absolute;top:18px;left:20px;z-index:3;color:rgba(255,255,255,.58);font:500 9px 'DM Mono',monospace;letter-spacing:.12em}
+    .orbit-label b{color:var(--green);font-weight:500}
+    .orbit-hint{position:absolute;right:20px;top:18px;color:rgba(255,255,255,.4);font:9px 'DM Mono',monospace}
+    .orbit{position:absolute;inset:44px 16px 18px;transform-style:preserve-3d;transition:transform .15s ease-out}
+    .ring{position:absolute;left:50%;top:50%;border:1px solid rgba(201,239,114,.25);border-radius:50%;transform:translate(-50%,-50%) rotateX(67deg) rotateZ(-12deg)}
+    .ring.one{width:82%;height:74%;animation:spin 24s linear infinite}
+    .ring.two{width:58%;height:52%;border-style:dashed;border-color:rgba(166,216,208,.32);animation:spin 16s linear infinite reverse}
+    .core{position:absolute;left:50%;top:50%;z-index:2;display:grid;place-items:center;width:76px;height:76px;border-radius:50%;transform:translate(-50%,-50%);background:var(--orange);color:white;font-size:28px;font-weight:800;animation:breathe 3.8s ease-in-out infinite}
+    .node{position:absolute;z-index:2;width:62px;height:62px;padding:5px;border:1px solid rgba(255,255,255,.3);border-radius:12px;background:#304842;box-shadow:0 10px 18px rgba(0,0,0,.3);animation:float 4.5s ease-in-out infinite}
+    .n2{animation-delay:-1.1s}.n3{animation-delay:-2.4s}.n4{animation-delay:-3.1s}.n5{animation-delay:-.6s}
+    .node:after{content:attr(data-name);position:absolute;top:70px;left:50%;color:rgba(255,255,255,.5);white-space:nowrap;transform:translateX(-50%);font:8px 'DM Mono',monospace}
+    .node div{display:grid;place-items:center;width:100%;height:100%;border-radius:8px;font-size:22px}
+    .n1{left:calc(50% - 31px);top:4%}.n2{left:76%;top:39%}.n3{left:63%;top:77%}.n4{left:17%;top:71%}.n5{left:3%;top:33%}
+    .art1{background:#e9f6c9}.art2{background:#a6d8d0}.art3{background:#e7c77e}.art4{background:#b5b8dc}.art5{background:#e99b86}
+    h2{margin:4px 0 0;font-size:17px;letter-spacing:-.05em}
+    .section-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:15px}
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:40px}
+    .metric{padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:rgba(255,253,249,.6);animation:reveal .6s both}
+    .metric:nth-child(1){animation-delay:.2s}.metric:nth-child(2){animation-delay:.3s}.metric:nth-child(3){animation-delay:.4s}.metric:nth-child(4){animation-delay:.5s}
+    .metric-label{color:var(--muted);font:500 9px 'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase}
+    .metric-value{margin:8px 0 4px;font-size:26px;font-weight:700;letter-spacing:-.07em}
+    .metric-delta{color:#6c972f;font:500 9px 'DM Mono',monospace}
+    .lower{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(260px,.75fr);gap:44px;animation:reveal .65s both .5s}
+    .cmd-list{display:grid;gap:8px;margin-top:16px}
+    .cmd-item{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:rgba(255,253,249,.6);transition:.18s}
+    .cmd-item:hover{border-color:var(--orange);background:#fff6f3}
+    .cmd-tag{font:600 11px 'DM Mono',monospace;color:var(--orange);white-space:nowrap;padding-top:1px}
+    .cmd-desc{font-size:10px;color:var(--muted);margin-top:3px}
+    .console{padding-left:26px;border-left:1px solid var(--line)}
+    .terminal{overflow:hidden;margin-top:16px;border:1px solid #344641;border-radius:12px;background:#172823;box-shadow:0 10px 22px rgba(38,52,45,.12)}
+    .terminal-head{display:flex;justify-content:space-between;padding:10px 13px;border-bottom:1px solid #344641;color:rgba(255,255,255,.4);font:9px 'DM Mono',monospace}
+    .terminal-body{padding:14px;color:var(--green);font:11px/1.9 'DM Mono',monospace}
+    .terminal-body i{color:#758b85;font-style:normal}
+    .dim{color:#4d6b63}
+    .run{display:block;text-align:center;width:100%;margin-top:11px;border:0;border-radius:8px;padding:11px;background:var(--orange);color:white;font-size:11px;font-weight:800;transition:.2s;text-decoration:none}
+    .run:hover{background:var(--ink)}
+    .mobile-nav{display:none}
+    @media(max-width:950px){.layout{grid-template-columns:72px minmax(0,1fr)}.sidebar{padding:24px 10px;align-items:center}.brand span,.nav-label,.nav span,.sidebar-foot{display:none}.nav{justify-content:center;padding:11px 0}.hero{grid-template-columns:1fr}.lower{grid-template-columns:1fr;gap:32px}.console{border:0;border-top:1px solid var(--line);padding:24px 0 0}}
+    @media(max-width:620px){.layout{display:block}.sidebar{display:none}main{padding:18px 16px 80px}.topbar{margin-bottom:32px}.hero{gap:22px;margin-bottom:26px}h1{font-size:clamp(2.8rem,14vw,4.2rem)}.metrics{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:30px}.metric-value{font-size:22px}.mobile-nav{position:fixed;z-index:8;right:12px;bottom:12px;left:12px;display:flex;justify-content:space-around;padding:8px;border:1px solid #cdd8cd;border-radius:14px;background:rgba(255,253,249,.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:var(--shadow)}.mobile-nav a{border:0;background:transparent;color:var(--muted);padding:8px 14px;font-size:17px;text-decoration:none}.mobile-nav a.active{color:var(--orange)}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="logo">P</span><span>pin orbit</span></a>
+    <div class="nav-label">Workspace</div>
+    <nav>
+      <a class="nav active" href="/"><i>◈</i><span>Command center</span></a>
+      <a class="nav" href="/discovery/"><i>◎</i><span>Discovery</span></a>
+      <a class="nav" href="/library/"><i>◌</i><span>Pin library</span></a>
+      <a class="nav" href="/automations/"><i>⌁</i><span>Automations</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="bot-card">
+        <div class="micro">Bot status</div>
+        <div class="bot-row"><span>Telegram webhook</span><span class="live">live</span></div>
+      </div>
+      <div class="user"><span class="avatar">NK</span><span>Nikhil / Pinterest</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div class="crumb">Command center <b>/</b> Pin Orbit</div>
+      <div class="top-actions">
+        <a class="btn-icon" href="/discovery/" title="Discover">◎</a>
+        <a class="btn-primary" href="/automations/">Bot commands ↗</a>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="kicker">Pinterest Affiliate Engine</div>
+        <h1>Turn trends<br><span>into pins.</span></h1>
+        <p class="lead"><strong>Pin Orbit</strong> watches Amazon India for products, writes SEO-optimised Pinterest copy with Gemini AI, and delivers it to your Telegram — ready to post.</p>
+        <div class="micro" style="margin-bottom:10px">Quick Telegram commands</div>
+        <div class="quick-cmds">
+          <span class="qcmd">/new</span>
+          <span class="qcmd">/new phones</span>
+          <span class="qcmd">/new laptops 2</span>
+          <span class="qcmd">/new phoneacc</span>
+          <span class="qcmd">/new homedecor</span>
+          <span class="qcmd">/stats</span>
+        </div>
+      </div>
+      <div class="orbit-card" id="orbitStage">
+        <div class="orbit-label">PIPELINE LIVE <b>●</b></div>
+        <div class="orbit-hint">MOVE TO EXPLORE</div>
+        <div class="orbit" id="orbit">
+          <div class="ring one"></div><div class="ring two"></div>
+          <div class="core">P</div>
+          <div class="node n1" data-name="phones"><div class="art1">📱</div></div>
+          <div class="node n2" data-name="laptops"><div class="art2">💻</div></div>
+          <div class="node n3" data-name="phone acc"><div class="art3">🎧</div></div>
+          <div class="node n4" data-name="home decor"><div class="art4">🪴</div></div>
+          <div class="node n5" data-name="laptop acc"><div class="art5">🖱️</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="metrics">
+      <div class="metric"><div class="metric-label">Categories</div><div class="metric-value">5</div><div class="metric-delta">phones · laptops · acc · decor</div></div>
+      <div class="metric"><div class="metric-label">Topic pool</div><div class="metric-value">55+</div><div class="metric-delta">shuffled on every /new</div></div>
+      <div class="metric"><div class="metric-label">Copy limit</div><div class="metric-value">800</div><div class="metric-delta">desc + hashtags combined</div></div>
+      <div class="metric"><div class="metric-label">Region</div><div class="metric-value">IN</div><div class="metric-delta">amazon.in · app deeplink</div></div>
+    </section>
+
+    <div class="lower">
+      <section>
+        <div class="section-head">
+          <div><div class="micro">Telegram bot</div><h2>Available commands</h2></div>
+          <a class="btn-primary" href="/automations/" style="font-size:10px;padding:8px 12px">Full guide ↗</a>
+        </div>
+        <div class="cmd-list">
+          <div class="cmd-item"><span class="cmd-tag">/new</span><div><strong style="font-size:11px">1 random product</strong><div class="cmd-desc">Picks from all 5 categories. Duplicates are tracked and skipped automatically.</div></div></div>
+          <div class="cmd-item"><span class="cmd-tag">/new phones 2</span><div><strong style="font-size:11px">N products from a category</strong><div class="cmd-desc">Categories: phones · laptops · phoneacc · laptopacc · homedecor (max 10)</div></div></div>
+          <div class="cmd-item"><span class="cmd-tag">/stats</span><div><strong style="font-size:11px">Show sent count</strong><div class="cmd-desc">Total products delivered + last 5 titles.</div></div></div>
+          <div class="cmd-item"><span class="cmd-tag">/reset</span><div><strong style="font-size:11px">Clear duplicate history</strong><div class="cmd-desc">Wipes the tracker so all products can be re-sent fresh.</div></div></div>
+        </div>
+      </section>
+
+      <aside class="console">
+        <div class="micro">What you receive per product</div>
+        <h2>Pin-ready output.</h2>
+        <div class="terminal">
+          <div class="terminal-head"><span>TELEGRAM OUTPUT FORMAT</span><span>● LIVE</span></div>
+          <div class="terminal-body">
+            <i>📌 TITLE</i> &lt;100 chars<br>
+            <i>📝 DESCRIPTION</i><br>
+            <span class="dim">  copy + hashtags</span><br>
+            <span class="dim">  750–800 chars total</span><br>
+            <i>🔎 ALT TEXT</i> &lt;500 chars<br>
+            <i>📋 BOARD NAME</i><br>
+            <i>🛒 AMAZON LINK</i><br>
+            <i>🖼️ IMAGE</i> 1500px hi-res<br>
+          </div>
+        </div>
+        <a class="run" href="/library/">View sent products ↗</a>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<div class="mobile-nav">
+  <a class="active" href="/">◈</a>
+  <a href="/discovery/">◎</a>
+  <a href="/library/">◌</a>
+  <a href="/automations/">⌁</a>
+</div>
+<script>
+  const stage=document.getElementById('orbitStage'),orbit=document.getElementById('orbit');
+  stage.addEventListener('pointermove',e=>{const b=stage.getBoundingClientRect();orbit.style.transform=`rotateX(${((e.clientY-b.top)/b.height-.5)*-10}deg) rotateY(${((e.clientX-b.left)/b.width-.5)*14}deg)`;});
+  stage.addEventListener('pointerleave',()=>orbit.style.transform='');
+</script>
+</body>
+</html>

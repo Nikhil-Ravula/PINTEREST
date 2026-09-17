@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pin Library | Pin Orbit</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+    :root{--bg:#f4f0e9;--ink:#17211f;--muted:#71807d;--line:#d9ddd5;--green:#c9ef72;--orange:#f36f4f;--teal:#a6d8d0;--shadow:0 18px 50px rgba(38,52,45,.13)}
+    *{box-sizing:border-box}body{margin:0;color:var(--ink);font-family:'Manrope',sans-serif;background:radial-gradient(circle at 80% 0,#dceecf,transparent 28rem),var(--bg)}
+    a{text-decoration:none;color:inherit}button{font:inherit;cursor:pointer}
+    @keyframes drift{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-5px) rotate(-5deg)}}
+    @keyframes reveal{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+    .layout{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+    .side{padding:28px 20px;border-right:1px solid var(--line);background:#fffdf977;display:flex;flex-direction:column}
+    .brand{display:flex;align-items:center;gap:12px;font-size:19px;font-weight:800;letter-spacing:-.06em}
+    .logo{display:grid;place-items:center;width:31px;height:31px;border-radius:11px 11px 11px 4px;background:var(--ink);color:var(--green);box-shadow:4px 4px var(--orange);transform:rotate(-8deg);animation:drift 4s ease-in-out infinite}
+    .label,.micro{color:var(--muted);font:500 9px 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase}.label{margin:48px 12px 12px}
+    nav{display:grid;gap:4px}
+    .nav{padding:11px 12px;border-radius:10px;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:12px;transition:.2s}
+    .nav:hover,.nav.active{background:var(--ink);color:var(--green)}
+    .nav i{display:inline-block;width:20px;font-style:normal;font-size:15px}
+    .side-foot{margin-top:auto}
+    .bot{padding:13px;border:1px solid #bdd88d;border-radius:12px;background:#e9f6c9;font-size:11px}
+    .live{float:right;color:#568029;font:500 10px 'DM Mono',monospace}.live:before{content:'';display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#79b330}
+    main{padding:28px clamp(20px,5vw,68px) 56px}
+    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:54px}
+    .crumb{color:var(--muted);font:500 10px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase}.crumb b{color:var(--orange);font-weight:500}
+    .btn-primary{border:0;border-radius:9px;padding:10px 15px;background:var(--ink);color:var(--green);font-size:11px;font-weight:800;transition:.2s}
+    .btn-primary:hover{background:var(--orange);color:white}
+    .btn-danger{border:0;border-radius:9px;padding:10px 15px;background:transparent;color:#c0392b;border:1px solid #e8b4b0;font-size:11px;font-weight:700;transition:.2s}
+    .btn-danger:hover{background:#fdf2f1}
+    h1{margin:12px 0 14px;font-size:clamp(3rem,6vw,5.5rem);line-height:.88;letter-spacing:-.09em;font-weight:800}
+    .accent{color:var(--orange)}
+    .sub{max-width:480px;color:var(--muted);font-size:13px;line-height:1.7;margin:0 0 36px}
+    .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:40px;animation:reveal .6s both .1s}
+    .stat{padding:16px 18px;border:1px solid var(--line);border-radius:13px;background:#fffdf9}
+    .stat-label{color:var(--muted);font:500 9px 'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase}
+    .stat-value{margin:8px 0 3px;font-size:28px;font-weight:700;letter-spacing:-.07em}
+    .stat-sub{color:var(--muted);font:500 9px 'DM Mono',monospace}
+    h2{margin:4px 0 0;font-size:17px;letter-spacing:-.05em}
+    .section-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
+    .empty{padding:48px;text-align:center;border:1px dashed var(--line);border-radius:16px;color:var(--muted)}
+    .empty h3{margin:12px 0 8px;font-size:16px;color:var(--ink)}
+    .empty p{margin:0 0 18px;font-size:13px;line-height:1.6}
+    .product-list{display:grid;gap:10px;animation:reveal .65s both .3s}
+    .product-card{display:grid;grid-template-columns:70px 1fr auto;gap:16px;align-items:center;padding:14px 16px;border:1px solid var(--line);border-radius:13px;background:#fffdf9;transition:.2s}
+    .product-card:hover{border-color:var(--teal);transform:translateY(-2px);box-shadow:0 8px 20px rgba(38,52,45,.08)}
+    .prod-thumb{width:70px;height:70px;border-radius:10px;object-fit:cover;background:var(--line)}
+    .prod-thumb-placeholder{width:70px;height:70px;border-radius:10px;background:#e9f0ee;display:grid;place-items:center;font-size:24px}
+    .prod-title{font-weight:700;font-size:13px;line-height:1.35;margin-bottom:5px}
+    .prod-meta{color:var(--muted);font:500 9px 'DM Mono',monospace;display:flex;gap:10px;flex-wrap:wrap}
+    .prod-link{padding:7px 12px;border:1px solid var(--line);border-radius:8px;font-size:10px;font-weight:700;color:var(--ink);transition:.2s}
+    .prod-link:hover{border-color:var(--orange);color:var(--orange)}
+    .pin-badge{display:inline-block;padding:3px 7px;border-radius:5px;font:500 9px 'DM Mono',monospace;background:#e9f6c9;color:#568029}
+    .mobile-nav{display:none}
+    @media(max-width:900px){.layout{grid-template-columns:72px 1fr}.side{padding:24px 10px;align-items:center}.brand span,.label,.nav span,.side-foot{display:none}.nav{padding:11px 0;width:100%;justify-content:center}.stats-row{grid-template-columns:repeat(2,1fr)}.product-card{grid-template-columns:55px 1fr auto}}
+    @media(max-width:620px){.layout{display:block}.side{display:none}main{padding:18px 16px 80px}.top{margin-bottom:36px}.stats-row{grid-template-columns:1fr 1fr}.product-card{grid-template-columns:1fr;gap:10px}.prod-thumb,.prod-thumb-placeholder{display:none}.mobile-nav{position:fixed;z-index:8;right:12px;bottom:12px;left:12px;display:flex;justify-content:space-around;padding:8px;border:1px solid #cdd8cd;border-radius:14px;background:rgba(255,253,249,.92);backdrop-filter:blur(14px);box-shadow:var(--shadow)}.mobile-nav a{color:var(--muted);padding:8px 14px;font-size:17px}.mobile-nav a.active{color:var(--orange)}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <a class="brand" href="/"><span class="logo">P</span><span>pin orbit</span></a>
+    <div class="label">Workspace</div>
+    <nav>
+      <a class="nav" href="/"><i>◈</i><span>Command center</span></a>
+      <a class="nav" href="/discovery/"><i>◎</i><span>Discovery</span></a>
+      <a class="nav active" href="/library/"><i>◌</i><span>Pin library</span></a>
+      <a class="nav" href="/automations/"><i>⌁</i><span>Automations</span></a>
+    </nav>
+    <div class="side-foot">
+      <div class="bot">Telegram webhook <span class="live">live</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div class="crumb">Pin library <b>/</b> Sent products</div>
+      <div style="display:flex;gap:9px">
+        <button class="btn-danger" onclick="if(confirm('Clear all sent product history?'))window.location='/api/reset/'">Reset history</button>
+        <a class="btn-primary" href="/discovery/">+ New product</a>
+      </div>
+    </header>
+
+    <div class="micro">Products sent via Telegram bot</div>
+    <h1>Your sent<br><span class="accent">products.</span></h1>
+    <p class="sub">Every product delivered to your Telegram is tracked here to avoid duplicates. Use <span style="font-family:'DM Mono',monospace;color:var(--orange)">/reset</span> in the bot to clear and start fresh.</p>
+
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-label">Total sent</div>
+        <div class="stat-value" id="totalSent">—</div>
+        <div class="stat-sub">unique products</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Duplicate protection</div>
+        <div class="stat-value">✓</div>
+        <div class="stat-sub">tracked by ASIN</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Region</div>
+        <div class="stat-value">IN</div>
+        <div class="stat-sub">amazon.in links</div>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <div><div class="micro">Sent products</div><h2>Recent deliveries</h2></div>
+    </div>
+
+    <div id="productList">
+      <div class="empty">
+        <div style="font-size:40px">📭</div>
+        <h3>No products sent yet</h3>
+        <p>Send <strong>/new</strong> in your Telegram bot to get your first product.<br>Everything delivered will appear here automatically.</p>
+        <a class="btn-primary" href="/automations/">View bot commands ↗</a>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="mobile-nav">
+  <a href="/">◈</a><a href="/discovery/">◎</a><a class="active" href="/library/">◌</a><a href="/automations/">⌁</a>
+</div>
+
+<script>
+// Fetch sent products from the API
+fetch('/api/sent-products/')
+  .then(r=>r.json())
+  .then(data=>{
+    document.getElementById('totalSent').textContent = data.total;
+    if(data.products && data.products.length){
+      document.getElementById('productList').innerHTML = `<div class="product-list">${data.products.map(p=>`
+        <div class="product-card">
+          ${p.image_url ? `<img class="prod-thumb" src="${p.image_url}" alt="${p.title}" onerror="this.style.display='none'">` : `<div class="prod-thumb-placeholder">📦</div>`}
+          <div>
+            <div class="prod-title">${p.title}</div>
+            <div class="prod-meta">
+              <span>ASIN: ${p.asin||'—'}</span>
+              <span>${p.sent_at}</span>
+              <span class="pin-badge">SENT</span>
+            </div>
+          </div>
+          ${p.url ? `<a class="prod-link" href="${p.url}" target="_blank">Amazon ↗</a>` : ''}
+        </div>`).join('')}</div>`;
+    }
+  })
+  .catch(()=>{document.getElementById('totalSent').textContent='—'});
+</script>
+</body>
+</html>

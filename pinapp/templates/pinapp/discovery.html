@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Discovery | Pin Orbit</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+    :root{--bg:#f4f0e9;--ink:#17211f;--muted:#71807d;--line:#d9ddd5;--green:#c9ef72;--orange:#f36f4f;--teal:#a6d8d0;--shadow:0 18px 50px rgba(38,52,45,.13)}
+    *{box-sizing:border-box}body{margin:0;color:var(--ink);font-family:'Manrope',sans-serif;background:radial-gradient(circle at 80% 0,#dceecf,transparent 28rem),var(--bg)}
+    a{text-decoration:none;color:inherit}button{font:inherit;cursor:pointer}
+    @keyframes drift{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-5px) rotate(-5deg)}}
+    @keyframes reveal{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+    .layout{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+    .side{padding:28px 20px;border-right:1px solid var(--line);background:#fffdf977;display:flex;flex-direction:column}
+    .brand{display:flex;align-items:center;gap:12px;font-size:19px;font-weight:800;letter-spacing:-.06em}
+    .logo{display:grid;place-items:center;width:31px;height:31px;border-radius:11px 11px 11px 4px;background:var(--ink);color:var(--green);box-shadow:4px 4px var(--orange);transform:rotate(-8deg);animation:drift 4s ease-in-out infinite}
+    .label,.micro{color:var(--muted);font:500 9px 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase}.label{margin:48px 12px 12px}
+    nav{display:grid;gap:4px}
+    .nav{padding:11px 12px;border-radius:10px;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:12px;transition:.2s}
+    .nav:hover,.nav.active{background:var(--ink);color:var(--green)}
+    .nav i{display:inline-block;width:20px;font-style:normal;font-size:15px}
+    .side-foot{margin-top:auto}
+    .bot{padding:13px;border:1px solid #bdd88d;border-radius:12px;background:#e9f6c9;font-size:11px}
+    .live{float:right;color:#568029;font:500 10px 'DM Mono',monospace}.live:before{content:'';display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#79b330}
+    main{padding:28px clamp(20px,5vw,68px) 56px}
+    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:56px}
+    .crumb{color:var(--muted);font:500 10px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase}.crumb b{color:var(--orange);font-weight:500}
+    .btn-primary{border:0;border-radius:9px;padding:10px 15px;background:var(--ink);color:var(--green);font-size:11px;font-weight:800;transition:.2s}
+    .btn-primary:hover{background:var(--orange);color:white}
+    h1{margin:12px 0 14px;font-size:clamp(3rem,6vw,5.8rem);line-height:.88;letter-spacing:-.09em;font-weight:800}
+    .accent{color:var(--orange)}
+    .sub{max-width:480px;color:var(--muted);font-size:13px;line-height:1.7;margin:0 0 40px}
+    .cats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:46px;animation:reveal .6s both .15s}
+    .cat{padding:18px 16px;border:1px solid var(--line);border-radius:14px;background:#fffdf9;cursor:pointer;transition:.2s;text-align:center}
+    .cat:hover,.cat.active{border-color:var(--orange);background:#fff6f3;transform:translateY(-3px);box-shadow:var(--shadow)}
+    .cat-icon{font-size:28px;margin-bottom:8px}
+    .cat-name{font-weight:700;font-size:12px;letter-spacing:-.02em}
+    .cat-count{margin-top:4px;color:var(--muted);font:500 9px 'DM Mono',monospace}
+    h2{margin:4px 0 0;font-size:17px;letter-spacing:-.05em}
+    .section-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
+    .topics-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;animation:reveal .6s both .3s}
+    .topic-card{padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fffdf9;transition:.2s}
+    .topic-card:hover{border-color:var(--teal);transform:translateY(-2px)}
+    .topic-name{font-weight:700;font-size:12px;margin-bottom:6px}
+    .topic-cmd{font:500 10px 'DM Mono',monospace;color:var(--orange);padding:4px 8px;background:#fff0e9;border-radius:6px;display:inline-block}
+    .how{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:46px;animation:reveal .65s both .45s}
+    .step{padding:18px;border:1px solid var(--line);border-radius:14px;background:#fffdf9}
+    .step-num{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--green);font:600 10px 'DM Mono',monospace;margin-bottom:12px}
+    .step h3{margin:0 0 6px;font-size:13px;letter-spacing:-.03em}
+    .step p{margin:0;color:var(--muted);font-size:11px;line-height:1.6}
+    .mobile-nav{display:none}
+    @media(max-width:900px){.layout{grid-template-columns:72px 1fr}.side{padding:24px 10px;align-items:center}.brand span,.label,.nav span,.side-foot{display:none}.nav{padding:11px 0;width:100%;justify-content:center}.cats{grid-template-columns:repeat(3,1fr)}.how{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:620px){.layout{display:block}.side{display:none}main{padding:18px 16px 80px}.top{margin-bottom:40px}.cats{grid-template-columns:repeat(2,1fr)}.topics-grid{grid-template-columns:1fr}.how{grid-template-columns:1fr}.mobile-nav{position:fixed;z-index:8;right:12px;bottom:12px;left:12px;display:flex;justify-content:space-around;padding:8px;border:1px solid #cdd8cd;border-radius:14px;background:rgba(255,253,249,.92);backdrop-filter:blur(14px);box-shadow:var(--shadow)}.mobile-nav a{color:var(--muted);padding:8px 14px;font-size:17px}.mobile-nav a.active{color:var(--orange)}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <a class="brand" href="/"><span class="logo">P</span><span>pin orbit</span></a>
+    <div class="label">Workspace</div>
+    <nav>
+      <a class="nav" href="/"><i>◈</i><span>Command center</span></a>
+      <a class="nav active" href="/discovery/"><i>◎</i><span>Discovery</span></a>
+      <a class="nav" href="/library/"><i>◌</i><span>Pin library</span></a>
+      <a class="nav" href="/automations/"><i>⌁</i><span>Automations</span></a>
+    </nav>
+    <div class="side-foot">
+      <div class="bot">Telegram webhook <span class="live">live</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div class="crumb">Discovery <b>/</b> Topics & categories</div>
+      <a class="btn-primary" href="/automations/">Run bot ↗</a>
+    </header>
+
+    <div class="micro">Amazon India · Gemini AI · Pinterest SEO</div>
+    <h1>Find the right<br><span class="accent">product.</span></h1>
+    <p class="sub">The bot searches Amazon India across these 5 categories and 55+ curated topics. Send a command in Telegram to get a pin-ready product with title, description, hashtags, alt text and affiliate link.</p>
+
+    <div class="cats" id="catGrid">
+      <div class="cat active" onclick="filterTopics('phones')">
+        <div class="cat-icon">📱</div>
+        <div class="cat-name">Phones</div>
+        <div class="cat-count">12 topics</div>
+      </div>
+      <div class="cat" onclick="filterTopics('laptops')">
+        <div class="cat-icon">💻</div>
+        <div class="cat-name">Laptops</div>
+        <div class="cat-count">10 topics</div>
+      </div>
+      <div class="cat" onclick="filterTopics('phoneacc')">
+        <div class="cat-icon">🎧</div>
+        <div class="cat-name">Phone Accessories</div>
+        <div class="cat-count">12 topics</div>
+      </div>
+      <div class="cat" onclick="filterTopics('laptopacc')">
+        <div class="cat-icon">🖱️</div>
+        <div class="cat-name">Laptop Accessories</div>
+        <div class="cat-count">12 topics</div>
+      </div>
+      <div class="cat" onclick="filterTopics('homedecor')">
+        <div class="cat-icon">🪴</div>
+        <div class="cat-name">Home Decor</div>
+        <div class="cat-count">20 topics</div>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <div><div class="micro">Search topics</div><h2 id="topicHeading">Phones — 12 topics</h2></div>
+    </div>
+    <div class="topics-grid" id="topicsGrid"></div>
+
+    <div class="section-head" style="margin-top:46px">
+      <div><div class="micro">How it works</div><h2>4 steps, one command</h2></div>
+    </div>
+    <div class="how">
+      <div class="step"><div class="step-num">01</div><h3>Pick a category</h3><p>Send <span style="color:var(--orange);font-family:'DM Mono',monospace">/new phones</span> or any category to the Telegram bot.</p></div>
+      <div class="step"><div class="step-num">02</div><h3>Amazon scraping</h3><p>Bot searches amazon.in via ScraperAPI, finds real products with prices, ratings, and hi-res images.</p></div>
+      <div class="step"><div class="step-num">03</div><h3>Gemini AI copy</h3><p>Gemini writes a Pinterest-optimised title (&lt;100 chars), description+hashtags (750–800 chars), and alt text.</p></div>
+      <div class="step"><div class="step-num">04</div><h3>Ready to post</h3><p>Bot delivers everything to Telegram. Copy, paste onto Pinterest. Done in under 60 seconds.</p></div>
+    </div>
+  </main>
+</div>
+
+<div class="mobile-nav">
+  <a href="/">◈</a><a class="active" href="/discovery/">◎</a><a href="/library/">◌</a><a href="/automations/">⌁</a>
+</div>
+
+<script>
+const TOPICS = {
+  phones: {label:'Phones', topics:['best smartphones under 20000','latest 5G smartphones','best camera phone','samsung galaxy phone','oneplus latest phone','redmi note latest','realme narzo phone','best gaming phone','foldable smartphone','phone with best battery life','slim lightweight smartphone','iphone latest model']},
+  laptops: {label:'Laptops', topics:['best laptop under 50000','gaming laptop','ultrabook thin laptop','macbook air laptop','hp pavilion laptop','lenovo ideapad laptop','asus vivobook laptop','2 in 1 convertible laptop','best laptop for students','laptop for video editing']},
+  phoneacc: {label:'Phone Accessories', topics:['phone case aesthetic','wireless earbuds bluetooth','fast charging cable usb c','phone holder car mount','tempered glass screen protector','portable power bank 20000mah','phone ring grip holder','wireless charging pad','phone camera lens kit','phone stand desk adjustable','magsafe accessories','airpods pro case cover']},
+  laptopacc: {label:'Laptop Accessories', topics:['laptop stand adjustable','laptop bag backpack','wireless mouse ergonomic','mechanical keyboard compact','laptop cooling pad','usb c hub multiport adapter','monitor riser desk organizer','laptop sleeve protective','external hard drive portable','webcam 1080p hd','laptop desk for bed','bluetooth keyboard and mouse combo']},
+  homedecor: {label:'Home Decor', topics:['aesthetic room decor','wall art canvas painting','led strip lights room','table lamp bedside modern','photo frame wall collage','indoor plants artificial','wall mirror decorative','throw pillow covers aesthetic','fairy lights for room','floating shelves wall mounted','scented candle gift set','desk organizer aesthetic','wall clock modern design','curtains for living room','rug carpet living room','vase flower decorative','wall stickers for bedroom','neon sign room decor','bookshelf organizer modern','cozy throw blanket']},
+};
+const CMD_MAP = {phones:'phones',laptops:'laptops',phoneacc:'phoneacc',laptopacc:'laptopacc',homedecor:'homedecor'};
+
+function filterTopics(key) {
+  document.querySelectorAll('.cat').forEach((c,i)=>c.classList.toggle('active',Object.keys(TOPICS)[i]===key));
+  const cat = TOPICS[key];
+  document.getElementById('topicHeading').textContent = `${cat.label} — ${cat.topics.length} topics`;
+  document.getElementById('topicsGrid').innerHTML = cat.topics.map(t=>`<div class="topic-card"><div class="topic-name">${t}</div><span class="topic-cmd">/new ${CMD_MAP[key]}</span></div>`).join('');
+}
+filterTopics('phones');
+</script>
+</body>
+</html>

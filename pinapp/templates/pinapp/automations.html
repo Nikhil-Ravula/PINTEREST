@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Automations | Pin Orbit</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+    :root{--bg:#f4f0e9;--ink:#17211f;--muted:#71807d;--line:#d9ddd5;--green:#c9ef72;--orange:#f36f4f;--teal:#a6d8d0;--dark:#172823;--shadow:0 18px 50px rgba(38,52,45,.13)}
+    *{box-sizing:border-box}body{margin:0;color:var(--ink);font-family:'Manrope',sans-serif;background:radial-gradient(circle at 80% 0,#dceecf,transparent 28rem),var(--bg)}
+    a{text-decoration:none;color:inherit}button{font:inherit;cursor:pointer}
+    @keyframes drift{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-5px) rotate(-5deg)}}
+    @keyframes reveal{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+    .layout{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+    .side{padding:28px 20px;border-right:1px solid var(--line);background:#fffdf977;display:flex;flex-direction:column}
+    .brand{display:flex;align-items:center;gap:12px;font-size:19px;font-weight:800;letter-spacing:-.06em}
+    .logo{display:grid;place-items:center;width:31px;height:31px;border-radius:11px 11px 11px 4px;background:var(--ink);color:var(--green);box-shadow:4px 4px var(--orange);transform:rotate(-8deg);animation:drift 4s ease-in-out infinite}
+    .label,.micro{color:var(--muted);font:500 9px 'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase}.label{margin:48px 12px 12px}
+    nav{display:grid;gap:4px}
+    .nav{padding:11px 12px;border-radius:10px;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:12px;transition:.2s}
+    .nav:hover,.nav.active{background:var(--ink);color:var(--green)}
+    .nav i{display:inline-block;width:20px;font-style:normal;font-size:15px}
+    .side-foot{margin-top:auto}
+    .bot{padding:13px;border:1px solid #bdd88d;border-radius:12px;background:#e9f6c9;font-size:11px}
+    .live{float:right;color:#568029;font:500 10px 'DM Mono',monospace}.live:before{content:'';display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#79b330}
+    main{padding:28px clamp(20px,5vw,68px) 56px}
+    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:54px}
+    .crumb{color:var(--muted);font:500 10px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase}.crumb b{color:var(--orange);font-weight:500}
+    h1{margin:12px 0 14px;font-size:clamp(2.8rem,5.5vw,5.5rem);line-height:.88;letter-spacing:-.09em;font-weight:800}
+    .accent{color:var(--orange)}
+    .sub{max-width:480px;color:var(--muted);font-size:13px;line-height:1.7;margin:0 0 42px}
+    h2{margin:4px 0 0;font-size:17px;letter-spacing:-.05em}
+    .section-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
+    .two-col{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-bottom:44px;animation:reveal .6s both .1s}
+    .terminal,.flow{padding:22px;border-radius:16px;box-shadow:var(--shadow)}
+    .terminal{background:var(--dark);color:var(--green)}
+    .terminal-head{display:flex;justify-content:space-between;padding-bottom:13px;border-bottom:1px solid #344641;color:#758b85;font:9px 'DM Mono',monospace}
+    .terminal-body{min-height:240px;padding-top:16px;font:11px/2.1 'DM Mono',monospace}
+    .dim{color:#4d6b63;font-style:normal}
+    .flow{background:#fffdf9;border:1px solid var(--line)}
+    .flow h2{margin:6px 0 20px}
+    .step{display:flex;gap:14px;padding:14px 0;border-top:1px solid var(--line)}
+    .step-num{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--green);font:600 10px 'DM Mono',monospace;flex-shrink:0;margin-top:1px}
+    .step h3{margin:0 0 4px;font-size:12px;letter-spacing:-.02em}
+    .step p{margin:0;color:var(--muted);font-size:10px;line-height:1.6}
+    .cmd-table{width:100%;border-collapse:collapse;animation:reveal .65s both .25s}
+    .cmd-table th{padding:10px 14px;text-align:left;font:500 9px 'DM Mono',monospace;letter-spacing:.1em;color:var(--muted);border-bottom:2px solid var(--line)}
+    .cmd-table td{padding:12px 14px;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top}
+    .cmd-table tr:last-child td{border-bottom:0}
+    .cmd-table tr:hover td{background:rgba(255,255,255,.5)}
+    .cmd{font-family:'DM Mono',monospace;font-size:11px;color:var(--orange);white-space:nowrap}
+    .pipeline-stages{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:44px;animation:reveal .7s both .4s}
+    .stage{padding:18px;border:1px solid var(--line);border-radius:14px;background:#fffdf9;position:relative}
+    .stage-icon{font-size:26px;margin-bottom:10px}
+    .stage h3{margin:0 0 6px;font-size:13px;letter-spacing:-.03em}
+    .stage p{margin:0;color:var(--muted);font-size:10px;line-height:1.6}
+    .stage-badge{position:absolute;top:14px;right:14px;padding:3px 7px;border-radius:5px;font:500 9px 'DM Mono',monospace;background:#e9f6c9;color:#568029}
+    .output-spec{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px;animation:reveal .7s both .5s}
+    .spec{padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fffdf9}
+    .spec-field{font:600 10px 'DM Mono',monospace;color:var(--orange);margin-bottom:5px}
+    .spec-rule{font-size:11px;font-weight:700;margin-bottom:4px}
+    .spec-note{color:var(--muted);font-size:10px;line-height:1.5}
+    .mobile-nav{display:none}
+    @media(max-width:900px){.layout{grid-template-columns:72px 1fr}.side{padding:24px 10px;align-items:center}.brand span,.label,.nav span,.side-foot{display:none}.nav{padding:11px 0;width:100%;justify-content:center}.two-col{grid-template-columns:1fr}.pipeline-stages{grid-template-columns:repeat(2,1fr)}.output-spec{grid-template-columns:1fr}}
+    @media(max-width:620px){.layout{display:block}.side{display:none}main{padding:18px 16px 80px}.top{margin-bottom:36px}.pipeline-stages{grid-template-columns:1fr}.mobile-nav{position:fixed;z-index:8;right:12px;bottom:12px;left:12px;display:flex;justify-content:space-around;padding:8px;border:1px solid #cdd8cd;border-radius:14px;background:rgba(255,253,249,.92);backdrop-filter:blur(14px);box-shadow:var(--shadow)}.mobile-nav a{color:var(--muted);padding:8px 14px;font-size:17px}.mobile-nav a.active{color:var(--orange)}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <a class="brand" href="/"><span class="logo">P</span><span>pin orbit</span></a>
+    <div class="label">Workspace</div>
+    <nav>
+      <a class="nav" href="/"><i>◈</i><span>Command center</span></a>
+      <a class="nav" href="/discovery/"><i>◎</i><span>Discovery</span></a>
+      <a class="nav" href="/library/"><i>◌</i><span>Pin library</span></a>
+      <a class="nav active" href="/automations/"><i>⌁</i><span>Automations</span></a>
+    </nav>
+    <div class="side-foot">
+      <div class="bot">Telegram webhook <span class="live">live</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div class="crumb">Automations <b>/</b> Bot & pipeline</div>
+    </header>
+
+    <div class="micro">Telegram bot · webhook mode · PythonAnywhere</div>
+    <h1>Bot commands<br><span class="accent">&amp; pipeline.</span></h1>
+    <p class="sub">Your Telegram bot runs on a Django webhook — no polling, no always-on task. Telegram pushes updates instantly. The bot scrapes Amazon India, generates AI copy, and replies with a complete pin.</p>
+
+    <div class="two-col">
+      <div class="terminal">
+        <div class="terminal-head"><span>TELEGRAM BOT / WEBHOOK MODE</span><span>● CONNECTED</span></div>
+        <div class="terminal-body">
+          <i class="dim">$ send /new phones 2</i><br>
+          → Searching for 2 fresh Phones...<br>
+          → Found 2! Generating copy...<br><br>
+          <i class="dim">📌 TITLE</i><br>
+          <span style="color:#a6d8d0">redmi note 13 pro 5g — 200mp...</span><br><br>
+          <i class="dim">📝 DESCRIPTION + HASHTAGS</i><br>
+          <span style="color:#c9ef72">...750–800 chars total...</span><br><br>
+          <i class="dim">🔎 ALT TEXT · 🛒 LINK · 🖼️ IMAGE</i>
+        </div>
+      </div>
+      <div class="flow">
+        <div class="micro">Pipeline</div>
+        <h2>Signal to pin</h2>
+        <div class="step"><div class="step-num">01</div><div><h3>Telegram command</h3><p>You send /new [category] [count]. Webhook receives it instantly on PythonAnywhere.</p></div></div>
+        <div class="step"><div class="step-num">02</div><div><h3>Amazon scrape</h3><p>ScraperAPI fetches amazon.in results bypassing IP blocks. Images upgraded to 1500px.</p></div></div>
+        <div class="step"><div class="step-num">03</div><div><h3>Gemini AI copy</h3><p>gemini-3.6-flash writes all 5 fields. Retries up to 6× on 503 errors with 15s→30s→60s backoff.</p></div></div>
+        <div class="step"><div class="step-num">04</div><div><h3>Telegram delivery</h3><p>Photo + formatted message sent. ASIN saved to DB so duplicates are blocked forever.</p></div></div>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <div><div class="micro">Command reference</div><h2>All bot commands</h2></div>
+    </div>
+    <table class="cmd-table">
+      <thead><tr><th>Command</th><th>What it does</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">/new</td><td>1 random product from any category</td><td style="color:var(--muted);font-size:11px">Shuffled every time</td></tr>
+        <tr><td class="cmd">/new 3</td><td>3 random products</td><td style="color:var(--muted);font-size:11px">Max 10 per command</td></tr>
+        <tr><td class="cmd">/new phones</td><td>1 product from Phones category</td><td style="color:var(--muted);font-size:11px">Also: phone, electronics</td></tr>
+        <tr><td class="cmd">/new laptops 2</td><td>2 products from Laptops</td><td style="color:var(--muted);font-size:11px">Also: laptop</td></tr>
+        <tr><td class="cmd">/new phoneacc</td><td>Phone accessories</td><td style="color:var(--muted);font-size:11px">Also: phone acc</td></tr>
+        <tr><td class="cmd">/new laptopacc</td><td>Laptop accessories</td><td style="color:var(--muted);font-size:11px">Also: laptop acc</td></tr>
+        <tr><td class="cmd">/new homedecor 5</td><td>5 home decor products</td><td style="color:var(--muted);font-size:11px">Also: home, decor</td></tr>
+        <tr><td class="cmd">/stats</td><td>Total sent + last 5 product titles</td><td style="color:var(--muted);font-size:11px"></td></tr>
+        <tr><td class="cmd">/reset</td><td>Clear duplicate history</td><td style="color:var(--muted);font-size:11px">All products can be re-sent</td></tr>
+        <tr><td class="cmd">/start</td><td>Welcome message + command list</td><td style="color:var(--muted);font-size:11px"></td></tr>
+      </tbody>
+    </table>
+
+    <div class="section-head" style="margin-top:44px">
+      <div><div class="micro">Output format</div><h2>What each pin contains</h2></div>
+    </div>
+    <div class="output-spec">
+      <div class="spec"><div class="spec-field">📌 TITLE</div><div class="spec-rule">Under 100 characters</div><div class="spec-note">SEO-optimised. Includes product type, brand, key feature. No ALL CAPS or clickbait.</div></div>
+      <div class="spec"><div class="spec-field">📝 DESCRIPTION + HASHTAGS</div><div class="spec-rule">750–800 characters total</div><div class="spec-note">Copy text (~350 chars) + 15–20 high-traffic hashtags. Ends with #ad. One field, copy together.</div></div>
+      <div class="spec"><div class="spec-field">🔎 ALT TEXT</div><div class="spec-rule">Under 500 characters</div><div class="spec-note">Visual description only — colours, materials, shapes. No promotional language.</div></div>
+      <div class="spec"><div class="spec-field">📋 BOARD NAME</div><div class="spec-rule">One suggested board</div><div class="spec-note">Matches a high-volume Pinterest search. Specific enough for a niche board of 50+ pins.</div></div>
+      <div class="spec"><div class="spec-field">🛒 AMAZON LINK</div><div class="spec-rule">amazon.in deeplink</div><div class="spec-note">Direct product URL. Opens Amazon India app on mobile. Tracks via affiliate tag.</div></div>
+      <div class="spec"><div class="spec-field">🖼️ IMAGE</div><div class="spec-rule">1500px hi-res</div><div class="spec-note">Upgraded from thumbnail via URL rewrite. Sharp, pin-worthy quality automatically.</div></div>
+    </div>
+  </main>
+</div>
+
+<div class="mobile-nav">
+  <a href="/">◈</a><a href="/discovery/">◎</a><a href="/library/">◌</a><a class="active" href="/automations/">⌁</a>
+</div>
+</body>
+</html>
