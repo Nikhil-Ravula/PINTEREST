@@ -1,5 +1,7 @@
+import asyncio
 import json
 import logging
+import threading
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
@@ -19,7 +21,10 @@ logger = logging.getLogger(__name__)
 def telegram_webhook_view(request):
     """
     Receives incoming Telegram updates via HTTP POST.
-    Telegram calls this URL for every user message/command.
+
+    Returns 200 OK immediately to Telegram, then processes the update
+    in a background thread. This prevents WSGI timeouts for slow commands
+    like /new (which does Amazon scraping + Gemini calls).
     """
     # Optional: verify the secret token header to block fake requests
     secret = getattr(settings, "TELEGRAM_WEBHOOK_SECRET", "")
@@ -33,16 +38,21 @@ def telegram_webhook_view(request):
     except (json.JSONDecodeError, ValueError):
         return HttpResponseBadRequest("Invalid JSON.")
 
-    async def _process():
-        app = await get_or_create_bot_app()
-        update = Update.de_json(data, app.bot)
-        await app.process_update(update)
+    # Process in a background thread so we return 200 to Telegram instantly.
+    # Without this, slow commands (/new takes 30-60s) will timeout.
+    def _process_in_background():
+        async def _async_process():
+            try:
+                app = await get_or_create_bot_app()
+                update = Update.de_json(data, app.bot)
+                await app.process_update(update)
+            except Exception as exc:
+                logger.error("Error processing Telegram update: %s", exc, exc_info=True)
 
-    try:
-        async_to_sync(_process)()
-    except Exception as exc:
-        logger.error("Error processing Telegram update: %s", exc, exc_info=True)
-        # Always return 200 so Telegram does not retry endlessly
-        return HttpResponse("Error logged.", status=200)
+        asyncio.run(_async_process())
 
+    thread = threading.Thread(target=_process_in_background, daemon=True)
+    thread.start()
+
+    # Return 200 immediately — Telegram won't retry
     return HttpResponse("OK")
