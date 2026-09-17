@@ -26,6 +26,7 @@ GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.6-flash')
 GEMINI_RETRIES = int(os.getenv('GEMINI_RETRIES', '3'))
 AMAZON_REGION = os.getenv('AMAZON_REGION', 'US')
 SCRAPER_API_KEY = os.getenv('SCRAPER_API_KEY', '')
+TELEGRAM_WEBHOOK_SECRET = os.getenv('TELEGRAM_WEBHOOK_SECRET', '')
 
 
 # Quick-start development settings - unsuitable for production
@@ -37,7 +38,11 @@ SECRET_KEY = 'django-insecure-k((a1=(77#21@28w)x=jiaw&wm*9)$=th-s@&416i2a8rjumam
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '.pythonanywhere.com',   # covers all *.pythonanywhere.com subdomains
+]
 
 
 # Application definition
