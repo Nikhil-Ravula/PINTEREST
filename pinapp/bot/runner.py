@@ -1,22 +1,27 @@
 """
-Bot runner — lazy-initialized singleton Application for webhook mode.
-The bot is built once on the first incoming webhook request and reused.
+Bot runner — builds a fresh Application per background thread.
+
+Each background thread runs its own asyncio event loop (via asyncio.run()),
+so we cannot share a single Application instance across threads. Instead we
+build a lightweight Application for every incoming webhook update.
+
+Handler registration is fast (no network calls), so there is no meaningful
+overhead per request.
 """
 
 import logging
 
 from django.conf import settings
-from telegram import Update
 from telegram.ext import Application, CommandHandler
 
 logger = logging.getLogger(__name__)
 
-_bot_app_instance = None
 
-
-def _build_application(token: str) -> Application:
-    """Build the Application and register all command handlers."""
-    # Import handlers from run_bot so we don't duplicate logic
+def build_bot_application() -> Application:
+    """
+    Build and return a new Application with all command handlers registered.
+    Does NOT call app.initialize() — that is done inside the async context.
+    """
     from pinapp.management.commands.run_bot import (
         cmd_start,
         cmd_new,
@@ -24,6 +29,10 @@ def _build_application(token: str) -> Application:
         cmd_reset,
         error_handler,
     )
+
+    token = getattr(settings, "TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set in .env")
 
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", cmd_start))
@@ -33,23 +42,3 @@ def _build_application(token: str) -> Application:
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_error_handler(error_handler)
     return app
-
-
-async def get_or_create_bot_app() -> Application:
-    """
-    Return the cached bot Application, creating and initializing it on first call.
-    Safe to call on every webhook request — initialization only runs once.
-    """
-    global _bot_app_instance
-
-    if _bot_app_instance is None:
-        token = getattr(settings, "TELEGRAM_BOT_TOKEN", "")
-        if not token:
-            raise RuntimeError("TELEGRAM_BOT_TOKEN is not set in .env")
-
-        app = _build_application(token)
-        await app.initialize()
-        _bot_app_instance = app
-        logger.info("Bot application initialized.")
-
-    return _bot_app_instance
