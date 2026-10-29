@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pinterest Connected | Pin Orbit</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+    :root{--bg:#f4f0e9;--ink:#17211f;--muted:#71807d;--panel:#fffdf9;--line:#d9ddd5;--green:#c9ef72;--orange:#f36f4f;--shadow:0 18px 45px rgba(38,52,45,.08)}
+    *{box-sizing:border-box}html{background:var(--bg)}
+    body{margin:0;color:var(--ink);font-family:'Manrope',sans-serif;background:radial-gradient(circle at 82% 0,#dceecf 0,transparent 28%),var(--bg);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 20px}
+    .card{max-width:540px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:44px 36px;box-shadow:var(--shadow);text-align:center}
+    .badge{width:56px;height:56px;margin:0 auto 20px;display:grid;place-items:center;border-radius:50%;background:#e8f7cc;color:#4f8216;font-size:26px}
+    h1{font-size:24px;font-weight:800;letter-spacing:-.03em;margin:0 0 10px}
+    p{color:#3f4c49;font-size:14px;line-height:1.6;margin:0 0 20px}
+    .scope-box{background:#f8faf6;border:1px solid #d9e3d4;border-radius:12px;padding:14px;font:500 11px 'DM Mono',monospace;color:#355320;word-break:break-all;margin-bottom:24px;text-align:left}
+    .btn{display:inline-block;padding:12px 24px;border-radius:10px;background:var(--ink);color:var(--green);font-size:13px;font-weight:800;text-decoration:none;transition:.2s}
+    .btn:hover{background:var(--orange);color:white}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">✓</div>
+    <h1>Pinterest Connected!</h1>
+    <p>Your Pinterest account has granted full write permissions to Pin Orbit. Your Access Token and 1-Year Refresh Token have been saved automatically.</p>
+    
+    <div class="scope-box">
+      <strong>Active Scopes:</strong><br>
+      {{ scope }}
+    </div>
+
+    <p style="font-size:12px;color:var(--muted)">You can now return to Telegram and send <code>/new</code> to post live pins directly to your boards!</p>
+    
+    <a href="/" class="btn">Go to Dashboard</a>
+  </div>
+</body>
+</html>

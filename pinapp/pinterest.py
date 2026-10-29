@@ -18,6 +18,40 @@ def get_default_board_id() -> str:
     return getattr(settings, "PINTEREST_BOARD_ID", "").strip()
 
 
+def refresh_pinterest_token() -> str | None:
+    """Use refresh_token to automatically obtain a fresh access_token from Pinterest."""
+    refresh_token = getattr(settings, "PINTEREST_REFRESH_TOKEN", "").strip()
+    client_id = getattr(settings, "PINTEREST_APP_ID", "1631413").strip()
+    client_secret = getattr(settings, "PINTEREST_APP_SECRET", "").strip()
+    if not refresh_token or not client_secret:
+        return None
+
+    auth_str = f"{client_id}:{client_secret}"
+    b64_auth = base64.b64encode(auth_str.encode()).decode()
+
+    headers = {
+        "Authorization": f"Basic {b64_auth}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+    }
+
+    try:
+        resp = requests.post("https://api.pinterest.com/v5/oauth/token", headers=headers, data=data, timeout=30)
+        if resp.status_code in (200, 201):
+            token_data = resp.json()
+            new_token = token_data.get("access_token")
+            if new_token:
+                from pinapp.views import update_env_variable
+                update_env_variable("PINTEREST_ACCESS_TOKEN", new_token)
+                return new_token
+    except Exception as exc:
+        logger.warning(f"Failed to refresh Pinterest token: {exc}")
+    return None
+
+
 def get_configured_boards() -> list[str]:
     """Return the list of user's Pinterest boards from settings or env."""
     import os

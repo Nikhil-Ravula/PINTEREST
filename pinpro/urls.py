@@ -5,6 +5,7 @@ from pinapp.views import (
     index, discovery, library, automations, privacy,
     api_sent_products, api_reset,
     telegram_webhook_view,
+    pinterest_connect, pinterest_callback,
 )
 
 urlpatterns = [
@@ -16,6 +17,10 @@ urlpatterns = [
     path('library/', library, name='library'),
     path('automations/', automations, name='automations'),
     path('privacy/', privacy, name='privacy'),
+
+    # Pinterest OAuth2
+    path('pinterest/connect/', pinterest_connect, name='pinterest_connect'),
+    path('pinterest/callback/', pinterest_callback, name='pinterest_callback'),
 
     # API
     path('api/sent-products/', api_sent_products, name='api_sent_products'),
