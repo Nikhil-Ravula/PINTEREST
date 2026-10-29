@@ -178,12 +178,18 @@ class Command(BaseCommand):
         )
 
         client = genai.Client(api_key=api_key)
-        retries = max(1, getattr(settings, "GEMINI_RETRIES", 6))
+        preferred_model = getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash")
+        candidate_models = [preferred_model, "gemini-3.8-flash", "gemini-3.6-flash"]
+        # keep unique in order
+        models_to_try = list(dict.fromkeys(candidate_models))
+
+        retries = max(2, getattr(settings, "GEMINI_RETRIES", 6))
         copy = None
         for attempt in range(retries):
+            current_model = models_to_try[attempt % len(models_to_try)]
             try:
                 response = client.models.generate_content(
-                    model=getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash"),
+                    model=current_model,
                     contents=user_prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=GEMINI_SYSTEM_PROMPT,
@@ -206,8 +212,11 @@ class Command(BaseCommand):
                 )
                 if not transient or attempt == retries - 1:
                     raise CommandError(f"Gemini request failed: {exc}") from exc
-                delay = 15 * (2 ** attempt)  # 15s, 30s, 60s, 120s, 240s ...
-                self.stdout.write(f"Gemini is busy (503); retrying in {delay}s (attempt {attempt + 1}/{retries})...")
+                delay = 5 * (attempt + 1)
+                next_model = models_to_try[(attempt + 1) % len(models_to_try)]
+                self.stdout.write(
+                    f"Gemini model {current_model} busy (503); switching to {next_model} in {delay}s (attempt {attempt + 1}/{retries})..."
+                )
                 time.sleep(delay)
 
         if copy is None:
@@ -260,23 +269,27 @@ class Command(BaseCommand):
 
         api_url = f"https://api.telegram.org/bot{bot_token}"
 
+        def _post_with_retry(endpoint, data, max_attempts=3):
+            for attempt in range(max_attempts):
+                try:
+                    resp = requests.post(f"{api_url}/{endpoint}", data=data, timeout=30)
+                    resp.raise_for_status()
+                    self._check_telegram_response(resp)
+                    return resp
+                except requests.RequestException as exc:
+                    if attempt < max_attempts - 1:
+                        time.sleep(2 * (attempt + 1))
+                        continue
+                    raise CommandError(f"Telegram {endpoint} failed after {max_attempts} attempts: {exc}") from exc
+
         # --- Message 1: Product image with short caption ---
         photo_caption = f"📌 {copy['title']}\n\n📋 Board: {copy['board_name']}"
-        try:
-            photo_response = requests.post(
-                f"{api_url}/sendPhoto",
-                data={
-                    "chat_id": chat_id,
-                    "photo": product["image_url"],
-                    "caption": photo_caption,
-                    "parse_mode": "HTML",
-                },
-                timeout=30,
-            )
-            photo_response.raise_for_status()
-            self._check_telegram_response(photo_response)
-        except requests.RequestException as exc:
-            raise CommandError(f"Telegram sendPhoto failed: {exc}") from exc
+        _post_with_retry("sendPhoto", {
+            "chat_id": chat_id,
+            "photo": product["image_url"],
+            "caption": photo_caption,
+            "parse_mode": "HTML",
+        })
 
         # --- Message 2: Full structured copy (HTML formatted) ---
         copy_message = (
@@ -292,21 +305,12 @@ class Command(BaseCommand):
             f"{self._escape_html(product['url'])}"
         )
 
-        try:
-            message_response = requests.post(
-                f"{api_url}/sendMessage",
-                data={
-                    "chat_id": chat_id,
-                    "text": copy_message,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": "true",
-                },
-                timeout=30,
-            )
-            message_response.raise_for_status()
-            self._check_telegram_response(message_response)
-        except requests.RequestException as exc:
-            raise CommandError(f"Telegram sendMessage failed: {exc}") from exc
+        _post_with_retry("sendMessage", {
+            "chat_id": chat_id,
+            "text": copy_message,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": "true",
+        })
 
     @staticmethod
     def _escape_html(text):

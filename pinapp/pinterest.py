@@ -1,3 +1,4 @@
+import base64
 import logging
 import requests
 from django.conf import settings
@@ -155,13 +156,44 @@ def publish_pin_to_pinterest(
                 "board_name": actual_board or board_name,
                 "error": None,
             }
-        else:
-            err_data = resp.json() if resp.content else {}
-            err_msg = err_data.get("message") or resp.text
-            return {
-                "success": False,
-                "error": f"Pinterest API error ({resp.status_code}): {err_msg}",
-            }
+
+        # If image_url failed (e.g. Pinterest crawler was blocked), fallback to image_base64
+        try:
+            img_resp = requests.get(image_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+            if img_resp.status_code == 200 and img_resp.content:
+                b64_data = base64.b64encode(img_resp.content).decode("utf-8")
+                content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
+                payload["media_source"] = {
+                    "source_type": "image_base64",
+                    "content_type": content_type,
+                    "data": b64_data,
+                }
+                retry_resp = requests.post(
+                    f"{PINTEREST_API_BASE}/pins",
+                    headers=headers,
+                    json=payload,
+                    timeout=30,
+                )
+                if retry_resp.status_code in (200, 201):
+                    data = retry_resp.json()
+                    pin_id = data.get("id")
+                    pin_url = f"https://www.pinterest.com/pin/{pin_id}/" if pin_id else None
+                    return {
+                        "success": True,
+                        "pin_id": pin_id,
+                        "pin_url": pin_url,
+                        "board_name": actual_board or board_name,
+                        "error": None,
+                    }
+        except Exception as img_exc:
+            logger.warning(f"Base64 image fallback attempt failed: {img_exc}")
+
+        err_data = resp.json() if resp.content else {}
+        err_msg = err_data.get("message") or resp.text
+        return {
+            "success": False,
+            "error": f"Pinterest API error ({resp.status_code}): {err_msg}",
+        }
     except Exception as exc:
         logger.error(f"Failed to post to Pinterest: {exc}", exc_info=True)
         return {"success": False, "error": f"Connection error: {exc}"}
