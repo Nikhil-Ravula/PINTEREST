@@ -379,30 +379,39 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
     board_menu_text, markup = build_board_menu(boards, copy["board_name"])
 
     short_title = CreatePinCommand._escape_html(product["title"][:120])
-    caption = (
-        f"🎯 <b>Product Selected for Pin!</b>\n\n"
-        f"📦 <b>{short_title}...</b>\n\n"
+    escaped_url = CreatePinCommand._escape_html(product["url"])
+
+    photo_caption = f"🎯 <b>Product Found for Pin!</b>\n\n📦 <b>{short_title}...</b>"
+    try:
+        await update.message.reply_photo(
+            photo=product["image_url"],
+            caption=photo_caption,
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as exc:
+        logger.warning(f"Could not send photo directly ({exc})")
+
+    menu_text = (
         f"🔗 <b>Amazon Link:</b>\n"
-        f"{product['url']}\n\n"
+        f"{escaped_url}\n\n"
         f"{board_menu_text}\n\n"
-        f"👉 <b>Tap a button or reply with a number (1–{len(boards)} or 0)</b>,\n"
+        f"👉 <b>Tap a button below or reply with a number (1–{len(boards)} or 0)</b>,\n"
         f"or directly paste your <b>Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>)!\n\n"
         f"<i>(Send /cancel to skip this product)</i>"
     )
 
     try:
-        await update.message.reply_photo(
-            photo=product["image_url"],
-            caption=caption,
+        await status_msg.edit_text(
+            menu_text,
             parse_mode=ParseMode.HTML,
             reply_markup=markup,
+            disable_web_page_preview=True,
         )
-        await status_msg.delete()
     except Exception as exc:
-        logger.warning(f"Could not send photo directly ({exc}); sending text...")
+        logger.error(f"Error editing status message with board menu: {exc}", exc_info=True)
+        # Fallback to plain text if HTML parsing has any edge case
         await status_msg.edit_text(
-            caption,
-            parse_mode=ParseMode.HTML,
+            f"🔗 Amazon Link:\n{product['url']}\n\n{board_menu_text}\n\n👉 Reply with board number or your affiliate link!",
             reply_markup=markup,
         )
 
