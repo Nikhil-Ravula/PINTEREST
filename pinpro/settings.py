@@ -27,6 +27,8 @@ GEMINI_RETRIES = int(os.getenv('GEMINI_RETRIES', '3'))
 AMAZON_REGION = os.getenv('AMAZON_REGION', 'US')
 SCRAPER_API_KEY = os.getenv('SCRAPER_API_KEY', '')
 TELEGRAM_WEBHOOK_SECRET = os.getenv('TELEGRAM_WEBHOOK_SECRET', '')
+PINTEREST_ACCESS_TOKEN = os.getenv('PINTEREST_ACCESS_TOKEN', '')
+PINTEREST_BOARD_ID = os.getenv('PINTEREST_BOARD_ID', '')
 
 
 # Quick-start development settings - unsuitable for production

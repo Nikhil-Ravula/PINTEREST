@@ -107,10 +107,10 @@
       <div class="flow">
         <div class="micro">Pipeline</div>
         <h2>Signal to pin</h2>
-        <div class="step"><div class="step-num">01</div><div><h3>Telegram command</h3><p>You send /new [category] [count]. Webhook receives it instantly on PythonAnywhere.</p></div></div>
+        <div class="step"><div class="step-num">01</div><div><h3>Telegram command</h3><p>You send /new [category]. Webhook receives it instantly on PythonAnywhere.</p></div></div>
         <div class="step"><div class="step-num">02</div><div><h3>Amazon scrape</h3><p>ScraperAPI fetches amazon.in results bypassing IP blocks. Images upgraded to 1500px.</p></div></div>
-        <div class="step"><div class="step-num">03</div><div><h3>Gemini AI copy</h3><p>gemini-3.6-flash writes all 5 fields. Retries up to 6× on 503 errors with 15s→30s→60s backoff.</p></div></div>
-        <div class="step"><div class="step-num">04</div><div><h3>Telegram delivery</h3><p>Photo + formatted message sent. ASIN saved to DB so duplicates are blocked forever.</p></div></div>
+        <div class="step"><div class="step-num">03</div><div><h3>Gemini AI copy</h3><p>gemini-3.6-flash writes all 5 fields. Retries up to 6× on 503 errors with exponential backoff.</p></div></div>
+        <div class="step"><div class="step-num">04</div><div><h3>Affiliate &amp; Pinterest</h3><p>Reply with your affiliate link (amzn.to). Bot publishes to Pinterest and replies with complete pin data.</p></div></div>
       </div>
     </div>
 
@@ -120,14 +120,10 @@
     <table class="cmd-table">
       <thead><tr><th>Command</th><th>What it does</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td class="cmd">/new</td><td>1 random product from any category</td><td style="color:var(--muted);font-size:11px">Shuffled every time</td></tr>
-        <tr><td class="cmd">/new 3</td><td>3 random products</td><td style="color:var(--muted);font-size:11px">Max 10 per command</td></tr>
-        <tr><td class="cmd">/new phones</td><td>1 product from Phones category</td><td style="color:var(--muted);font-size:11px">Also: phone, electronics</td></tr>
-        <tr><td class="cmd">/new laptops 2</td><td>2 products from Laptops</td><td style="color:var(--muted);font-size:11px">Also: laptop</td></tr>
-        <tr><td class="cmd">/new phoneacc</td><td>Phone accessories</td><td style="color:var(--muted);font-size:11px">Also: phone acc</td></tr>
-        <tr><td class="cmd">/new laptopacc</td><td>Laptop accessories</td><td style="color:var(--muted);font-size:11px">Also: laptop acc</td></tr>
-        <tr><td class="cmd">/new homedecor 5</td><td>5 home decor products</td><td style="color:var(--muted);font-size:11px">Also: home, decor</td></tr>
-        <tr><td class="cmd">/stats</td><td>Total sent + last 5 product titles</td><td style="color:var(--muted);font-size:11px"></td></tr>
+        <tr><td class="cmd">/new</td><td>Find 1 fresh trending product</td><td style="color:var(--muted);font-size:11px">Replies with Amazon link &amp; awaits your affiliate link</td></tr>
+        <tr><td class="cmd">/new [cat]</td><td>Find product from specific category</td><td style="color:var(--muted);font-size:11px">phones, laptops, phoneacc, laptopacc, homedecor</td></tr>
+        <tr><td class="cmd">/cancel</td><td>Discard active pending product</td><td style="color:var(--muted);font-size:11px">Allows picking a different product</td></tr>
+        <tr><td class="cmd">/stats</td><td>Total sent + last 5 product titles</td><td style="color:var(--muted);font-size:11px">Database metrics</td></tr>
         <tr><td class="cmd">/reset</td><td>Clear duplicate history</td><td style="color:var(--muted);font-size:11px">All products can be re-sent</td></tr>
         <tr><td class="cmd">/start</td><td>Welcome message + command list</td><td style="color:var(--muted);font-size:11px"></td></tr>
       </tbody>

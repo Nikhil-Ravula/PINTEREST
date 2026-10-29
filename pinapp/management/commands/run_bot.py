@@ -15,14 +15,16 @@ Bot commands (send these in Telegram):
 import asyncio
 import io
 import logging
+import re
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-from pinapp.models import SentProduct
+from pinapp.models import SentProduct, PendingPin
+from pinapp.pinterest import publish_pin_to_pinterest
 from .automate_pins import Command as AutomateCommand, AMAZON_DOMAINS
 from .create_pin import Command as CreatePinCommand
 
@@ -226,18 +228,21 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text(
-        f"<b>Pinterest Product Bot</b>\n\n"
+        f"<b>Pin Orbit | Pinterest Affiliate Bot</b>\n\n"
+        f"<b>How it works:</b>\n"
+        f"1. Send <code>/new</code> (or <code>/new phones</code>) to find a product.\n"
+        f"2. Bot replies with the product image and normal Amazon link.\n"
+        f"3. <b>Reply with your affiliate link</b> (e.g. <code>https://amzn.to/...</code>).\n"
+        f"4. Bot creates the Pin on Pinterest and replies with all pin data!\n\n"
         f"<b>Commands:</b>\n"
-        f"/new - 1 random product\n"
-        f"/new 3 - 3 random products\n\n"
-        f"<b>By category:</b>\n"
-        f"{cat_lines}\n\n"
-        f"<b>Category + count:</b>\n"
-        f"  /new phones 3\n"
-        f"  /new homedecor 2\n\n"
+        f"/new - Find 1 product\n"
+        f"/new [category] - Find by category\n"
+        f"/cancel - Cancel pending product\n"
         f"/stats - Products sent so far\n"
         f"/reset - Clear sent history\n\n"
-        f"Total sent: <b>{total_sent}</b>",
+        f"<b>Categories:</b>\n"
+        f"{cat_lines}\n\n"
+        f"Total unique products sent: <b>{total_sent}</b>",
         parse_mode=ParseMode.HTML,
     )
 
@@ -280,73 +285,47 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /new [category] [count] — find and send new product pins."""
-
-    # --- Parse arguments: category and/or count ---
+    """Handle /new [category] — find 1 product and ask user for affiliate link."""
     category = None
-    count = 1
     cat_label = "random"
 
     args = list(context.args) if context.args else []
 
-    # Try to parse category from first arg
     if args:
         resolved = _resolve_category(args[0])
         if resolved:
             category = resolved
             cat_label = CATEGORIES[resolved]["label"]
-            args.pop(0)
+        elif len(args) >= 2:
+            resolved = _resolve_category(f"{args[0]} {args[1]}")
+            if resolved:
+                category = resolved
+                cat_label = CATEGORIES[resolved]["label"]
+            else:
+                cat_list = ", ".join(CATEGORIES.keys())
+                await update.message.reply_text(
+                    f"Unknown category: <b>{args[0]}</b>\n\n"
+                    f"Available: {cat_list}\n"
+                    f"Usage: /new [category]",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
         else:
-            # Maybe it's just a number
-            try:
-                count = int(args[0])
-                args.pop(0)
-            except ValueError:
-                # Try joining first two args as category (e.g. "phone accessories")
-                if len(args) >= 2:
-                    resolved = _resolve_category(f"{args[0]} {args[1]}")
-                    if resolved:
-                        category = resolved
-                        cat_label = CATEGORIES[resolved]["label"]
-                        args = args[2:]
-                    else:
-                        cat_list = ", ".join(CATEGORIES.keys())
-                        await update.message.reply_text(
-                            f"Unknown category: <b>{args[0]}</b>\n\n"
-                            f"Available: {cat_list}\n"
-                            f"Usage: /new [category] [count]",
-                            parse_mode=ParseMode.HTML,
-                        )
-                        return
-                else:
-                    cat_list = ", ".join(CATEGORIES.keys())
-                    await update.message.reply_text(
-                        f"Unknown category: <b>{args[0]}</b>\n\n"
-                        f"Available: {cat_list}\n"
-                        f"Usage: /new [category] [count]",
-                        parse_mode=ParseMode.HTML,
-                    )
-                    return
+            cat_list = ", ".join(CATEGORIES.keys())
+            await update.message.reply_text(
+                f"Unknown category: <b>{args[0]}</b>\n\n"
+                f"Available: {cat_list}\n"
+                f"Usage: /new [category]",
+                parse_mode=ParseMode.HTML,
+            )
+            return
 
-    # Try to parse count from remaining args
-    if args:
-        try:
-            count = int(args[0])
-        except ValueError:
-            pass
-
-    if count < 1 or count > 10:
-        await update.message.reply_text("Please request between 1 and 10 products.")
-        return
-
-    # --- Status message ---
     status_msg = await update.message.reply_text(
-        f"Searching for {count} fresh {cat_label} product(s)...\nThis may take a moment."
+        f"🔍 Searching Amazon India for a fresh {cat_label} product...\nThis may take 15–30 seconds."
     )
 
-    # --- Find new products (sync, runs in thread) ---
     try:
-        products = await asyncio.to_thread(find_new_products, count, category)
+        products = await asyncio.to_thread(find_new_products, 1, category)
     except Exception as exc:
         logger.error(f"Error finding products: {exc}", exc_info=True)
         await status_msg.edit_text(f"Error finding products: {exc}")
@@ -354,63 +333,166 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not products:
         await status_msg.edit_text(
-            f"Couldn't find any new {cat_label} products right now.\n"
-            "Amazon may be rate-limiting requests. Try again in a few minutes."
+            f"Couldn't find any fresh {cat_label} products right now.\n"
+            "Amazon may be rate-limiting. Try again in a couple minutes."
         )
         return
 
-    await status_msg.edit_text(
-        f"Found {len(products)} {cat_label} product(s)! Generating Pinterest copy with AI..."
-    )
+    product = products[0]
+    await status_msg.edit_text("✨ Product found! Generating high-ranking Pinterest SEO copy with AI...")
 
-    # --- Process each product: Gemini -> Telegram -> save ---
     create_pin = CreatePinCommand()
-    create_pin.stdout = io.StringIO()  # Suppress console output
-    sent_count = 0
+    create_pin.stdout = io.StringIO()
 
-    for i, product in enumerate(products):
-        try:
-            # Generate SEO copy via Gemini
-            copy = await asyncio.to_thread(create_pin.generate_copy, product)
+    try:
+        copy = await asyncio.to_thread(create_pin.generate_copy, product)
+    except Exception as exc:
+        logger.error(f"Gemini copy generation failed: {exc}", exc_info=True)
+        await status_msg.edit_text(f"Failed to generate copy: {exc}")
+        return
 
-            # Send photo + formatted text to Telegram
-            await asyncio.to_thread(create_pin.send_to_telegram, product, copy)
+    chat_id = str(update.effective_chat.id)
+    asin = CreatePinCommand.extract_asin(product["url"]) or ""
 
-            # Save ASIN to database — never send this product again
-            asin = CreatePinCommand.extract_asin(product["url"])
-            if asin:
-                await asyncio.to_thread(
-                    SentProduct.objects.get_or_create,
-                    asin=asin,
-                    defaults={
-                        "title": product["title"][:500],
-                        "url": product["url"],
-                        "topic": product.get("topic", "")[:200],
-                    },
-                )
+    # Save to PendingPin (replace any previous pending pin for this chat)
+    def _save_pending():
+        PendingPin.objects.filter(chat_id=chat_id).delete()
+        return PendingPin.objects.create(
+            chat_id=chat_id,
+            asin=asin,
+            title=product["title"][:500],
+            original_url=product["url"],
+            image_url=product["image_url"],
+            topic=product.get("topic", "")[:200],
+            pin_title=copy["title"],
+            pin_description=copy["description"],
+            pin_alt_text=copy["alt_text"],
+            board_name=copy["board_name"],
+        )
 
-            sent_count += 1
+    await asyncio.to_thread(_save_pending)
 
-            # Small delay between products to avoid Telegram rate limits
-            if i < len(products) - 1:
-                await asyncio.sleep(2)
-
-        except Exception as exc:
-            logger.error(f"Error processing product {i + 1}: {exc}", exc_info=True)
-            try:
-                short_title = product["title"][:40]
-                await update.message.reply_text(
-                    f"Skipped product {i + 1} ({short_title}...): {exc}"
-                )
-            except Exception:
-                pass
-
-    # --- Final summary ---
-    total_sent = await asyncio.to_thread(SentProduct.objects.count)
-    await status_msg.edit_text(
-        f"Done! Sent {sent_count}/{len(products)} product(s).\n"
-        f"Total unique products sent: {total_sent}"
+    short_title = CreatePinCommand._escape_html(product["title"][:120])
+    caption = (
+        f"🎯 <b>Product Selected for Pin!</b>\n\n"
+        f"📦 <b>{short_title}...</b>\n\n"
+        f"🔗 <b>Normal Amazon Link:</b>\n"
+        f"{product['url']}\n\n"
+        f"👉 <b>Reply to this message with your Affiliate Link</b> "
+        f"(e.g. <code>https://amzn.to/...</code>) to publish to Pinterest!\n\n"
+        f"<i>(Send /cancel to skip this product)</i>"
     )
+
+    try:
+        await update.message.reply_photo(
+            photo=product["image_url"],
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+        )
+        await status_msg.delete()
+    except Exception as exc:
+        logger.warning(f"Could not send photo directly ({exc}); sending text...")
+        await status_msg.edit_text(caption, parse_mode=ParseMode.HTML)
+
+
+async def handle_affiliate_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Listen for user's reply with their affiliate link and finalize/publish the pin."""
+    if not update.message or not update.message.text:
+        return
+
+    text = update.message.text.strip()
+    chat_id = str(update.effective_chat.id)
+
+    def _get_pending():
+        return PendingPin.objects.filter(chat_id=chat_id).first()
+
+    pending = await asyncio.to_thread(_get_pending)
+    if not pending:
+        # No pending pin for this chat; ignore normal messages
+        return
+
+    match = re.search(r"https?://[^\s]+", text)
+    if not match:
+        await update.message.reply_text(
+            "⚠️ Please reply with a valid URL (e.g. <code>https://amzn.to/...</code>) "
+            "or send /cancel to discard this product.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    affiliate_link = match.group(0).strip()
+    status_msg = await update.message.reply_text("⏳ Finalizing pin and publishing to Pinterest...")
+
+    # Attempt publishing to Pinterest via API
+    pin_res = await asyncio.to_thread(
+        publish_pin_to_pinterest,
+        title=pending.pin_title,
+        description=pending.pin_description,
+        link=affiliate_link,
+        image_url=pending.image_url,
+        alt_text=pending.pin_alt_text,
+        board_name=pending.board_name,
+    )
+
+    # Save ASIN to SentProduct so it is never reused
+    def _finalize():
+        if pending.asin:
+            SentProduct.objects.get_or_create(
+                asin=pending.asin,
+                defaults={
+                    "title": pending.title[:500],
+                    "url": pending.original_url,
+                    "topic": pending.topic[:200],
+                },
+            )
+        pending.delete()
+
+    await asyncio.to_thread(_finalize)
+
+    # Build response with all requested fields
+    if pin_res.get("success"):
+        header = "🎉 <b>PIN PUBLISHED TO PINTEREST!</b>"
+        live_pin = f"📌 <b>LIVE PIN URL:</b>\n{pin_res['pin_url']}\n\n"
+    else:
+        header = "📝 <b>PIN DATA COMPLETED</b>"
+        err = pin_res.get("error", "")
+        live_pin = f"ℹ️ <i>Pinterest status: {err}</i>\n\n" if err else ""
+
+    response_text = (
+        f"{header}\n\n"
+        f"{live_pin}"
+        f"📌 <b>TITLE</b>\n"
+        f"<code>{CreatePinCommand._escape_html(pending.pin_title)}</code>\n\n"
+        f"📝 <b>DESCRIPTION</b>\n"
+        f"<code>{CreatePinCommand._escape_html(pending.pin_description)}</code>\n\n"
+        f"🖼️ <b>ALT TEXT</b>\n"
+        f"<code>{CreatePinCommand._escape_html(pending.pin_alt_text)}</code>\n\n"
+        f"📋 <b>BOARD NAME</b>\n"
+        f"<code>{CreatePinCommand._escape_html(pending.board_name)}</code>\n\n"
+        f"🔗 <b>AFFILIATE LINK</b>\n"
+        f"{affiliate_link}"
+    )
+
+    await status_msg.edit_text(
+        response_text,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
+
+
+async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /cancel — discard active pending pin."""
+    chat_id = str(update.effective_chat.id)
+
+    def _do_cancel():
+        n = PendingPin.objects.filter(chat_id=chat_id).delete()
+        return n[0] if n else 0
+
+    count = await asyncio.to_thread(_do_cancel)
+    if count > 0:
+        await update.message.reply_text("❌ Cancelled pending product. Send /new to pick a fresh one.")
+    else:
+        await update.message.reply_text("No pending product to cancel. Send /new to pick one.")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -433,15 +515,15 @@ class Command(BaseCommand):
         app.add_handler(CommandHandler("start", cmd_start))
         app.add_handler(CommandHandler("help", cmd_start))
         app.add_handler(CommandHandler("new", cmd_new))
+        app.add_handler(CommandHandler("cancel", cmd_cancel))
         app.add_handler(CommandHandler("stats", cmd_stats))
         app.add_handler(CommandHandler("reset", cmd_reset))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_affiliate_link))
         app.add_error_handler(error_handler)
 
         self.stdout.write(self.style.SUCCESS(
             "Bot is running! Send /start or /new in Telegram."
         ))
-        # drop_pending_updates=True ensures clean startup even if
-        # a previous instance was running
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,

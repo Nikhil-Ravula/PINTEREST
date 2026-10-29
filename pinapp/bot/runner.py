@@ -25,10 +25,13 @@ def build_bot_application() -> Application:
     from pinapp.management.commands.run_bot import (
         cmd_start,
         cmd_new,
+        cmd_cancel,
         cmd_stats,
         cmd_reset,
+        handle_affiliate_link,
         error_handler,
     )
+    from telegram.ext import MessageHandler, filters
 
     token = getattr(settings, "TELEGRAM_BOT_TOKEN", "")
     if not token:
@@ -38,7 +41,9 @@ def build_bot_application() -> Application:
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_start))
     app.add_handler(CommandHandler("new", cmd_new))
+    app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_affiliate_link))
     app.add_error_handler(error_handler)
     return app
