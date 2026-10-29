@@ -32,6 +32,9 @@ def library(request):
 def automations(request):
     return render(request, 'pinapp/automations.html')
 
+def privacy(request):
+    return render(request, 'pinapp/privacy.html')
+
 
 # ── API endpoints ──────────────────────────────────────────────────────────────
 

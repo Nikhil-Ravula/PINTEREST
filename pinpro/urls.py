@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 
 from pinapp.views import (
-    index, discovery, library, automations,
+    index, discovery, library, automations, privacy,
     api_sent_products, api_reset,
     telegram_webhook_view,
 )
@@ -15,6 +15,7 @@ urlpatterns = [
     path('discovery/', discovery, name='discovery'),
     path('library/', library, name='library'),
     path('automations/', automations, name='automations'),
+    path('privacy/', privacy, name='privacy'),
 
     # API
     path('api/sent-products/', api_sent_products, name='api_sent_products'),
