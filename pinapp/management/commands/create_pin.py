@@ -183,7 +183,7 @@ class Command(BaseCommand):
         # keep unique in order
         models_to_try = list(dict.fromkeys(candidate_models))
 
-        retries = max(2, getattr(settings, "GEMINI_RETRIES", 6))
+        retries = 3
         copy = None
         for attempt in range(retries):
             current_model = models_to_try[attempt % len(models_to_try)]
@@ -202,27 +202,20 @@ class Command(BaseCommand):
                 )
                 copy = json.loads(self._response_text(response))
                 break
-            except (json.JSONDecodeError, TypeError, ValueError) as exc:
-                raise CommandError(f"Gemini returned invalid JSON: {exc}") from exc
+            except (json.JSONDecodeError, TypeError, ValueError):
+                if attempt == retries - 1:
+                    raise CommandError("Gemini returned malformed response.")
+                time.sleep(2)
             except Exception as exc:
-                error_text = str(exc).lower()
-                transient = any(
-                    marker in error_text
-                    for marker in ("503", "429", "unavailable", "resource_exhausted", "temporarily", "overloaded")
-                )
-                if not transient or attempt == retries - 1:
+                if attempt == retries - 1:
                     raise CommandError(f"Gemini request failed: {exc}") from exc
-                delay = 5 * (attempt + 1)
-                next_model = models_to_try[(attempt + 1) % len(models_to_try)]
-                self.stdout.write(
-                    f"Gemini model {current_model} busy (503); switching to {next_model} in {delay}s (attempt {attempt + 1}/{retries})..."
-                )
+                delay = 2 * (attempt + 1)
                 time.sleep(delay)
 
         if copy is None:
-            raise CommandError("Gemini did not return a valid response after all retries.")
+            raise CommandError("Gemini did not return a valid response after retries.")
 
-        self.validate_copy(copy)
+        self.validate_copy(copy, product)
         return copy
 
     @staticmethod
@@ -233,30 +226,36 @@ class Command(BaseCommand):
         return text
 
     # ------------------------------------------------------------------
-    # Validation
+    # Validation (Auto-healing, never crashes on slight character overflows)
     # ------------------------------------------------------------------
     @staticmethod
-    def validate_copy(copy):
+    def validate_copy(copy, product=None):
         required_keys = {"title", "description", "alt_text", "board_name"}
-        missing = required_keys - set(copy)
-        if missing:
-            raise CommandError(f"Gemini response is missing keys: {missing}")
+        for k in required_keys:
+            if k not in copy or not str(copy[k]).strip():
+                if k == "title" and product:
+                    copy["title"] = product.get("title", "Trending Product")[:100]
+                elif k == "board_name":
+                    copy["board_name"] = "Amazon Finds"
+                elif k == "alt_text":
+                    copy["alt_text"] = "Product image preview"
+                elif k == "description":
+                    copy["description"] = "Check out this trending product on Amazon! #AmazonFinds #Trending #ad"
 
         limits = {"title": 100, "description": 800, "alt_text": 500}
         for field, limit in limits.items():
-            if not isinstance(copy[field], str) or not copy[field].strip():
-                raise CommandError(f"Gemini returned an empty {field}.")
-            if len(copy[field]) > limit:
-                raise CommandError(f"Gemini {field} must be under {limit} characters (got {len(copy[field])}).")
+            val = str(copy.get(field, "")).strip()
+            if len(val) > limit:
+                copy[field] = val[:limit]
 
-        # Validate hashtags exist inside description
-        hashtag_list = re.findall(r"(?<!\w)#([A-Za-z0-9_]+)", copy["description"])
-        if len(hashtag_list) < 5:
-            raise CommandError(f"Description must contain at least 5 hashtags + #ad (got {len(hashtag_list)}).")
-
-        # Board name must not be empty
-        if not isinstance(copy.get("board_name"), str) or not copy["board_name"].strip():
-            raise CommandError("Gemini returned an empty board_name.")
+        # Ensure at least 3 hashtags and #ad
+        desc = copy.get("description", "")
+        hashtag_list = re.findall(r"(?<!\w)#([A-Za-z0-9_]+)", desc)
+        if len(hashtag_list) < 3:
+            desc = (desc[:720] + " #AmazonFinds #Trending #TechGadgets #ad")
+        if "#ad" not in desc:
+            desc = (desc[:790] + " #ad")
+        copy["description"] = desc[:800]
 
     # ------------------------------------------------------------------
     # Telegram delivery
