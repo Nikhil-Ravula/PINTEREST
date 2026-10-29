@@ -18,6 +18,15 @@ def get_default_board_id() -> str:
     return getattr(settings, "PINTEREST_BOARD_ID", "").strip()
 
 
+def get_configured_boards() -> list[str]:
+    """Return the list of user's Pinterest boards from settings or env."""
+    import os
+    custom = os.getenv("PINTEREST_BOARDS", "")
+    if custom:
+        return [b.strip() for b in custom.split(",") if b.strip()]
+    return list(getattr(settings, "PINTEREST_DEFAULT_BOARDS", []))
+
+
 def get_or_resolve_board_id(board_name: str, access_token: str = None) -> tuple[str | None, str | None]:
     """
     Find an existing board matching board_name, or create it, or fall back to default board.

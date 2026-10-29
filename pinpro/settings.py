@@ -29,6 +29,16 @@ SCRAPER_API_KEY = os.getenv('SCRAPER_API_KEY', '')
 TELEGRAM_WEBHOOK_SECRET = os.getenv('TELEGRAM_WEBHOOK_SECRET', '')
 PINTEREST_ACCESS_TOKEN = os.getenv('PINTEREST_ACCESS_TOKEN', '')
 PINTEREST_BOARD_ID = os.getenv('PINTEREST_BOARD_ID', '')
+PINTEREST_DEFAULT_BOARDS = [
+    "Mobile Accessories & Gadgets",
+    "Modern Home Decor",
+    "Laptop Accessories & Setup",
+    "Best Smartphones & Reviews",
+    "Best Laptops & Reviews",
+    "Best Watches & Smartwatches",
+    "Summer Beauty & Fashion",
+    "Women Outfit Ideas",
+]
 
 
 # Quick-start development settings - unsuitable for production

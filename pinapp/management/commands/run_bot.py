@@ -19,12 +19,15 @@ import re
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters
+)
 
 from pinapp.models import SentProduct, PendingPin
-from pinapp.pinterest import publish_pin_to_pinterest
+from pinapp.pinterest import publish_pin_to_pinterest, get_configured_boards
 from .automate_pins import Command as AutomateCommand, AMAZON_DOMAINS
 from .create_pin import Command as CreatePinCommand
 
@@ -372,14 +375,18 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await asyncio.to_thread(_save_pending)
 
+    boards = get_configured_boards()
+    board_menu_text, markup = build_board_menu(boards, copy["board_name"])
+
     short_title = CreatePinCommand._escape_html(product["title"][:120])
     caption = (
         f"🎯 <b>Product Selected for Pin!</b>\n\n"
         f"📦 <b>{short_title}...</b>\n\n"
-        f"🔗 <b>Normal Amazon Link:</b>\n"
+        f"🔗 <b>Amazon Link:</b>\n"
         f"{product['url']}\n\n"
-        f"👉 <b>Reply to this message with your Affiliate Link</b> "
-        f"(e.g. <code>https://amzn.to/...</code>) to publish to Pinterest!\n\n"
+        f"{board_menu_text}\n\n"
+        f"👉 <b>Tap a button or reply with a number (1–{len(boards)} or 0)</b>,\n"
+        f"or directly paste your <b>Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>)!\n\n"
         f"<i>(Send /cancel to skip this product)</i>"
     )
 
@@ -388,15 +395,86 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
             photo=product["image_url"],
             caption=caption,
             parse_mode=ParseMode.HTML,
+            reply_markup=markup,
         )
         await status_msg.delete()
     except Exception as exc:
         logger.warning(f"Could not send photo directly ({exc}); sending text...")
-        await status_msg.edit_text(caption, parse_mode=ParseMode.HTML)
+        await status_msg.edit_text(
+            caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=markup,
+        )
+
+
+def build_board_menu(boards, ai_board):
+    """Build formatted board list text and inline keyboard buttons."""
+    lines = ["📋 <b>Choose Pinterest Board:</b>"]
+    for i, b in enumerate(boards, 1):
+        lines.append(f"  <b>{i}</b>. {CreatePinCommand._escape_html(b)}")
+    lines.append(f"  <b>0</b>. ✨ AI Suggested: <i>{CreatePinCommand._escape_html(ai_board)}</i>")
+
+    keyboard = []
+    row = []
+    for i, b in enumerate(boards, 1):
+        label = f"{i}. {b[:18]}..." if len(b) > 20 else f"{i}. {b}"
+        row.append(InlineKeyboardButton(label, callback_data=f"set_board_{i}"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    keyboard.append([
+        InlineKeyboardButton(f"✨ 0. AI Default: {ai_board[:22]}", callback_data="set_board_0")
+    ])
+    return "\n".join(lines), InlineKeyboardMarkup(keyboard)
+
+
+async def handle_board_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle tap on inline board selection buttons."""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data or ""
+    if not data.startswith("set_board_"):
+        return
+
+    chat_id = str(query.message.chat.id)
+    idx_str = data.replace("set_board_", "")
+    boards = get_configured_boards()
+
+    def _update_board():
+        pending = PendingPin.objects.filter(chat_id=chat_id).first()
+        if not pending:
+            return None, None
+        if idx_str == "0":
+            chosen = pending.board_name
+        else:
+            try:
+                idx = int(idx_str) - 1
+                chosen = boards[idx]
+                pending.board_name = chosen
+                pending.save()
+            except (ValueError, IndexError):
+                chosen = pending.board_name
+        return pending, chosen
+
+    pending, chosen_board = await asyncio.to_thread(_update_board)
+    if not pending:
+        await query.message.reply_text("No active pending pin. Send /new to pick a product.")
+        return
+
+    await query.message.reply_text(
+        f"✅ <b>Board selected:</b> {CreatePinCommand._escape_html(chosen_board)}\n\n"
+        f"👉 <b>Now reply with your Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>) to publish to Pinterest!\n\n"
+        f"<i>(Send /cancel to skip this product)</i>",
+        parse_mode=ParseMode.HTML,
+    )
 
 
 async def handle_affiliate_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Listen for user's reply with their affiliate link and finalize/publish the pin."""
+    """Listen for user's board selection number OR affiliate link."""
     if not update.message or not update.message.text:
         return
 
@@ -408,20 +486,56 @@ async def handle_affiliate_link(update: Update, context: ContextTypes.DEFAULT_TY
 
     pending = await asyncio.to_thread(_get_pending)
     if not pending:
-        # No pending pin for this chat; ignore normal messages
         return
 
+    boards = get_configured_boards()
+
+    # Case 1: User typed a board number (0 to len(boards))
+    if text.isdigit():
+        val = int(text)
+        if val == 0:
+            await update.message.reply_text(
+                f"✅ <b>Board confirmed:</b> {CreatePinCommand._escape_html(pending.board_name)} (AI Suggested)\n\n"
+                f"👉 <b>Now reply with your Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>) to publish to Pinterest!\n\n"
+                f"<i>(Send /cancel to skip this product)</i>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        elif 1 <= val <= len(boards):
+            chosen_board = boards[val - 1]
+            def _save_board():
+                pending.board_name = chosen_board
+                pending.save()
+            await asyncio.to_thread(_save_board)
+            await update.message.reply_text(
+                f"✅ <b>Board selected:</b> {CreatePinCommand._escape_html(chosen_board)}\n\n"
+                f"👉 <b>Now reply with your Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>) to publish to Pinterest!\n\n"
+                f"<i>(Send /cancel to skip this product)</i>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        else:
+            await update.message.reply_text(
+                f"⚠️ Invalid number. Please pick between 1 and {len(boards)} (or 0 for AI default).",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+    # Case 2: User pasted an affiliate link
     match = re.search(r"https?://[^\s]+", text)
     if not match:
         await update.message.reply_text(
-            "⚠️ Please reply with a valid URL (e.g. <code>https://amzn.to/...</code>) "
-            "or send /cancel to discard this product.",
+            f"⚠️ Please type a board number (1–{len(boards)} or 0) or send your affiliate link (e.g. <code>https://amzn.to/...</code>).\n\n"
+            f"<i>(Send /cancel to discard this product)</i>",
             parse_mode=ParseMode.HTML,
         )
         return
 
     affiliate_link = match.group(0).strip()
-    status_msg = await update.message.reply_text("⏳ Finalizing pin and publishing to Pinterest...")
+    status_msg = await update.message.reply_text(
+        f"⏳ Publishing pin to board <b>{CreatePinCommand._escape_html(pending.board_name)}</b>...",
+        parse_mode=ParseMode.HTML,
+    )
 
     # Attempt publishing to Pinterest via API
     pin_res = await asyncio.to_thread(
@@ -518,6 +632,7 @@ class Command(BaseCommand):
         app.add_handler(CommandHandler("cancel", cmd_cancel))
         app.add_handler(CommandHandler("stats", cmd_stats))
         app.add_handler(CommandHandler("reset", cmd_reset))
+        app.add_handler(CallbackQueryHandler(handle_board_callback))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_affiliate_link))
         app.add_error_handler(error_handler)
 
