@@ -9,6 +9,9 @@ from django.core.management.base import BaseCommand, CommandError
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -161,13 +164,69 @@ class Command(BaseCommand):
         match = re.search(r"/dp/([A-Za-z0-9]{10})(?:/|$)", url)
         return match.group(1) if match else None
 
+    @classmethod
+    def generate_fallback_copy(cls, product):
+        """
+        Generate high-quality Pinterest SEO copy directly from product data
+        if Gemini API is experiencing 503 high demand or temporary downtime.
+        """
+        raw_title = product.get("title", "Trending Amazon Find").strip()
+        clean_title = re.sub(r"\s+", " ", raw_title)
+        if len(clean_title) > 85:
+            clean_title = clean_title[:82].rsplit(" ", 1)[0] + "..."
+        pin_title = f"{clean_title}: Must-Have Deal"[:100]
+
+        features = product.get("features", "").strip()
+        feat_snippet = f" Highlights: {features[:180]}." if features else ""
+
+        topic_str = f"{product.get('topic', '')} {raw_title}".lower()
+        if any(w in topic_str for w in ["decor", "home", "living", "pillow", "cushion", "lamp", "curtain", "rug", "candle"]):
+            board_name = "Modern Home Decor"
+            hashtags = "#HomeDecor #AestheticHome #LivingRoomDecor #InteriorStyling #AmazonHome #HomeFinds #RoomMakeover"
+        elif any(w in topic_str for w in ["laptop", "macbook", "computer", "pc", "monitor", "keyboard", "mouse"]):
+            board_name = "Best Laptops & Reviews"
+            hashtags = "#BestLaptops #TechGadgets #WorkFromHome #Productivity #DeskSetup #AmazonTech #LaptopDeals"
+        elif any(w in topic_str for w in ["phone", "mobile", "charger", "magsafe", "earbuds", "audio", "case"]):
+            board_name = "Mobile Accessories & Gadgets"
+            hashtags = "#PhoneAccessories #TechGadgets #MagSafe #AmazonFinds #SmartGadgets #MustHaveTech #MobileTech"
+        elif any(w in topic_str for w in ["watch", "smartwatch", "fitness"]):
+            board_name = "Best Watches & Smartwatches"
+            hashtags = "#Smartwatches #WatchLovers #FitnessTracker #TechStyle #AmazonDeals #WristWatch"
+        elif any(w in topic_str for w in ["beauty", "skin", "makeup", "hair"]):
+            board_name = "Summer Beauty & Fashion"
+            hashtags = "#BeautyFinds #SkincareRoutine #SummerBeauty #GlowUp #AmazonBeauty #SelfCare"
+        elif any(w in topic_str for w in ["dress", "outfit", "wear", "shoes", "fashion", "bag"]):
+            board_name = "Women Outfit Ideas"
+            hashtags = "#OutfitInspo #FashionTrends #StyleInspo #AmazonFashion #WardrobeEssentials #LookOfTheDay"
+        else:
+            board_name = "Mobile Accessories & Gadgets"
+            hashtags = "#AmazonFinds #TrendingDeals #MustHave #ViralProducts #DailyFinds #BestDeals"
+
+        description = (
+            f"Discover why this {clean_title} is trending right now! "
+            f"If you are looking to upgrade your setup or daily routine, this is the ultimate must-have pick."
+            f"{feat_snippet} Tap the link to check price and availability on Amazon! "
+            f"{hashtags} #TrendingNow #MustHaveGadgets #ad"
+        )[:800]
+
+        alt_text = f"High-resolution product photo of {clean_title} showcasing modern design and details against clean background"[:500]
+
+        return {
+            "title": pin_title,
+            "description": description,
+            "alt_text": alt_text,
+            "board_name": board_name,
+        }
+
     # ------------------------------------------------------------------
-    # Gemini copy generation
+    # Gemini copy generation with resilient fallback
     # ------------------------------------------------------------------
     def generate_copy(self, product):
         api_key = getattr(settings, "GEMINI_API_KEY", "")
         if not api_key or api_key == "YOUR GEMINI API KEY":
-            raise CommandError("Set GEMINI_API_KEY in .env before running the command.")
+            copy = self.generate_fallback_copy(product)
+            self.validate_copy(copy, product)
+            return copy
 
         user_prompt = (
             "Create Pinterest copy from this raw Amazon product data.\n"
@@ -177,43 +236,46 @@ class Command(BaseCommand):
             f"Image URL: {product['image_url']}"
         )
 
-        client = genai.Client(api_key=api_key)
+        try:
+            client = genai.Client(
+                api_key=api_key,
+                http_options=types.HttpOptions(timeout=12000),
+            )
+        except Exception as client_err:
+            logger.warning(f"Failed to initialize Gemini client: {client_err}")
+            client = None
+
         preferred_model = getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash")
-        candidate_models = [preferred_model, "gemini-3.8-flash", "gemini-3.6-flash"]
-        # keep unique in order
+        candidate_models = [preferred_model, "gemini-3.5-flash", "gemini-flash-latest"]
         models_to_try = list(dict.fromkeys(candidate_models))
 
-        retries = 3
         copy = None
-        for attempt in range(retries):
-            current_model = models_to_try[attempt % len(models_to_try)]
-            try:
-                response = client.models.generate_content(
-                    model=current_model,
-                    contents=user_prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=GEMINI_SYSTEM_PROMPT,
-                        response_mime_type="application/json",
-                        response_schema=PinCopy,
-                        automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                            disable=True,
+        if client:
+            for attempt, current_model in enumerate(models_to_try):
+                try:
+                    response = client.models.generate_content(
+                        model=current_model,
+                        contents=user_prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=GEMINI_SYSTEM_PROMPT,
+                            response_mime_type="application/json",
+                            response_schema=PinCopy,
+                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                                disable=True,
+                            ),
                         ),
-                    ),
-                )
-                copy = json.loads(self._response_text(response))
-                break
-            except (json.JSONDecodeError, TypeError, ValueError):
-                if attempt == retries - 1:
-                    raise CommandError("Gemini returned malformed response.")
-                time.sleep(2)
-            except Exception as exc:
-                if attempt == retries - 1:
-                    raise CommandError(f"Gemini request failed: {exc}") from exc
-                delay = 2 * (attempt + 1)
-                time.sleep(delay)
+                    )
+                    text = self._response_text(response)
+                    if text:
+                        copy = json.loads(text)
+                        break
+                except Exception as exc:
+                    logger.warning(f"Gemini model {current_model} failed (attempt {attempt+1}/{len(models_to_try)}): {exc}")
+                    time.sleep(1)
 
         if copy is None:
-            raise CommandError("Gemini did not return a valid response after retries.")
+            logger.info("All Gemini models busy (503/timeout). Using high-quality SEO fallback copy.")
+            copy = self.generate_fallback_copy(product)
 
         self.validate_copy(copy, product)
         return copy

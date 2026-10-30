@@ -287,8 +287,20 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+ACTIVE_SEARCHES = set()
+
+
 async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /new [category] — find 1 product and ask user for affiliate link."""
+    chat_id = str(update.effective_chat.id)
+    if chat_id in ACTIVE_SEARCHES:
+        await update.message.reply_text(
+            "⏳ <b>A product search is already running!</b>\n"
+            "Please wait a few seconds for your product to arrive before requesting another.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
     category = None
     cat_label = "random"
 
@@ -323,97 +335,111 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+    ACTIVE_SEARCHES.add(chat_id)
     status_msg = await update.message.reply_text(
-        f"🔍 Searching Amazon India for a fresh {cat_label} product...\nThis may take 15–30 seconds."
+        f"🔍 Searching Amazon India for a fresh {cat_label} product...\nThis may take 15–25 seconds."
     )
 
     try:
-        products = await asyncio.to_thread(find_new_products, 1, category)
-    except Exception as exc:
-        logger.error(f"Error finding products: {exc}", exc_info=True)
-        await status_msg.edit_text(f"Error finding products: {exc}")
-        return
+        try:
+            products = await asyncio.to_thread(find_new_products, 1, category)
+        except Exception as exc:
+            logger.error(f"Error finding products: {exc}", exc_info=True)
+            await status_msg.edit_text(f"Error finding products: {exc}")
+            return
 
-    if not products:
-        await status_msg.edit_text(
-            f"Couldn't find any fresh {cat_label} products right now.\n"
-            "Amazon may be rate-limiting. Try again in a couple minutes."
+        if not products:
+            await status_msg.edit_text(
+                f"Couldn't find any fresh {cat_label} products right now.\n"
+                "Amazon may be rate-limiting. Try again in a couple minutes."
+            )
+            return
+
+        product = products[0]
+        try:
+            await status_msg.edit_text("✨ Product found! Preparing Pinterest SEO copy...")
+        except Exception:
+            pass
+
+        create_pin = CreatePinCommand()
+        create_pin.stdout = io.StringIO()
+
+        try:
+            copy = await asyncio.to_thread(create_pin.generate_copy, product)
+        except Exception as exc:
+            logger.error(f"Copy generation failed: {exc}", exc_info=True)
+            await status_msg.edit_text(f"Failed to generate copy: {exc}")
+            return
+
+        asin = CreatePinCommand.extract_asin(product["url"]) or ""
+
+        # Save to PendingPin (replace any previous pending pin for this chat)
+        def _save_pending():
+            PendingPin.objects.filter(chat_id=chat_id).delete()
+            return PendingPin.objects.create(
+                chat_id=chat_id,
+                asin=asin,
+                title=product["title"][:500],
+                original_url=product["url"],
+                image_url=product["image_url"],
+                topic=product.get("topic", "")[:200],
+                pin_title=copy["title"],
+                pin_description=copy["description"],
+                pin_alt_text=copy["alt_text"],
+                board_name=copy["board_name"],
+            )
+
+        await asyncio.to_thread(_save_pending)
+
+        boards = get_configured_boards()
+        board_menu_text, markup = build_board_menu(boards, copy["board_name"])
+
+        short_title = CreatePinCommand._escape_html(product["title"][:120])
+        escaped_url = CreatePinCommand._escape_html(product["url"])
+
+        # 1. Send the product photo first
+        photo_caption = f"🎯 <b>Product Found for Pin!</b>\n\n📦 <b>{short_title}...</b>"
+        try:
+            await update.message.reply_photo(
+                photo=product["image_url"],
+                caption=photo_caption,
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception as exc:
+            logger.warning(f"Could not send photo directly ({exc})")
+
+        # 2. Send the Amazon Link and Board Selection Menu as a new message directly below the photo
+        menu_text = (
+            f"🔗 <b>Amazon Link:</b>\n"
+            f"{escaped_url}\n\n"
+            f"{board_menu_text}\n\n"
+            f"👉 <b>Tap a button below or reply with a number (1–{len(boards)} or 0)</b>,\n"
+            f"or directly paste your <b>Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>)!\n\n"
+            f"<i>(Send /cancel to skip this product)</i>"
         )
-        return
 
-    product = products[0]
-    await status_msg.edit_text("✨ Product found! Generating high-ranking Pinterest SEO copy with AI...")
+        try:
+            await update.message.reply_text(
+                menu_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=markup,
+                disable_web_page_preview=True,
+            )
+        except Exception as exc:
+            logger.error(f"Error sending board menu: {exc}", exc_info=True)
+            await update.message.reply_text(
+                f"🔗 Amazon Link:\n{product['url']}\n\n{board_menu_text}\n\n👉 Reply with board number or your affiliate link!",
+                reply_markup=markup,
+            )
 
-    create_pin = CreatePinCommand()
-    create_pin.stdout = io.StringIO()
+        # 3. Clean up the initial search status message
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
 
-    try:
-        copy = await asyncio.to_thread(create_pin.generate_copy, product)
-    except Exception as exc:
-        logger.error(f"Gemini copy generation failed: {exc}", exc_info=True)
-        await status_msg.edit_text(f"Failed to generate copy: {exc}")
-        return
-
-    chat_id = str(update.effective_chat.id)
-    asin = CreatePinCommand.extract_asin(product["url"]) or ""
-
-    # Save to PendingPin (replace any previous pending pin for this chat)
-    def _save_pending():
-        PendingPin.objects.filter(chat_id=chat_id).delete()
-        return PendingPin.objects.create(
-            chat_id=chat_id,
-            asin=asin,
-            title=product["title"][:500],
-            original_url=product["url"],
-            image_url=product["image_url"],
-            topic=product.get("topic", "")[:200],
-            pin_title=copy["title"],
-            pin_description=copy["description"],
-            pin_alt_text=copy["alt_text"],
-            board_name=copy["board_name"],
-        )
-
-    await asyncio.to_thread(_save_pending)
-
-    boards = get_configured_boards()
-    board_menu_text, markup = build_board_menu(boards, copy["board_name"])
-
-    short_title = CreatePinCommand._escape_html(product["title"][:120])
-    escaped_url = CreatePinCommand._escape_html(product["url"])
-
-    photo_caption = f"🎯 <b>Product Found for Pin!</b>\n\n📦 <b>{short_title}...</b>"
-    try:
-        await update.message.reply_photo(
-            photo=product["image_url"],
-            caption=photo_caption,
-            parse_mode=ParseMode.HTML,
-        )
-    except Exception as exc:
-        logger.warning(f"Could not send photo directly ({exc})")
-
-    menu_text = (
-        f"🔗 <b>Amazon Link:</b>\n"
-        f"{escaped_url}\n\n"
-        f"{board_menu_text}\n\n"
-        f"👉 <b>Tap a button below or reply with a number (1–{len(boards)} or 0)</b>,\n"
-        f"or directly paste your <b>Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>)!\n\n"
-        f"<i>(Send /cancel to skip this product)</i>"
-    )
-
-    try:
-        await status_msg.edit_text(
-            menu_text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=markup,
-            disable_web_page_preview=True,
-        )
-    except Exception as exc:
-        logger.error(f"Error editing status message with board menu: {exc}", exc_info=True)
-        # Fallback to plain text if HTML parsing has any edge case
-        await status_msg.edit_text(
-            f"🔗 Amazon Link:\n{product['url']}\n\n{board_menu_text}\n\n👉 Reply with board number or your affiliate link!",
-            reply_markup=markup,
-        )
+    finally:
+        ACTIVE_SEARCHES.discard(chat_id)
 
 
 def build_board_menu(boards, ai_board):
@@ -604,8 +630,9 @@ async def handle_affiliate_link(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /cancel — discard active pending pin."""
+    """Handle /cancel — discard active pending pin and stop active search."""
     chat_id = str(update.effective_chat.id)
+    ACTIVE_SEARCHES.discard(chat_id)
 
     def _do_cancel():
         n = PendingPin.objects.filter(chat_id=chat_id).delete()

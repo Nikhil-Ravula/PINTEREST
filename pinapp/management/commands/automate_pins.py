@@ -317,7 +317,7 @@ class Command(BaseCommand):
 
     def search_amazon(self, topic, limit, domain="www.amazon.com"):
         """Search Amazon for products matching a topic, with retry on CAPTCHA."""
-        search_url = f"https://{domain}/s?k={quote_plus(f'{topic} products')}"
+        search_url = f"https://{domain}/s?k={quote_plus(topic)}"
         return self._fetch_and_parse_amazon(search_url, topic, limit, domain)
 
     def scrape_amazon_page(self, url, limit, domain="www.amazon.com"):
@@ -338,7 +338,7 @@ class Command(BaseCommand):
         scraper_url = self._scraper_api_url(url)
         if scraper_url:
             try:
-                response = requests.get(scraper_url, timeout=60)
+                response = requests.get(scraper_url, timeout=30)
                 response.raise_for_status()
                 if not self._is_captcha_page(response.text):
                     products = self._extract_products(response.text, topic, limit, domain)
@@ -347,33 +347,23 @@ class Command(BaseCommand):
             except requests.RequestException:
                 pass  # Fall through to direct requests
 
-        # --- Direct requests fallback (works on home internet, not servers) ---
-        max_attempts = 3
+        # --- Direct requests fallback ---
+        max_attempts = 1 if scraper_url else 2
         for attempt in range(max_attempts):
             session = self._build_session()
             try:
-                # First visit the homepage to get cookies
-                try:
-                    session.get(f"https://{domain}/", timeout=15)
-                except requests.RequestException:
-                    pass  # Non-critical; proceed without homepage cookies
-
-                response = session.get(url, timeout=30)
+                response = session.get(url, timeout=20)
                 response.raise_for_status()
             except requests.RequestException as exc:
                 if attempt < max_attempts - 1:
-                    self.stdout.write(f"  Retry {attempt + 1}: Request failed ({exc})")
                     continue
                 raise CommandError(f"Could not fetch Amazon: {exc}") from exc
 
             if self._is_captcha_page(response.text):
                 if attempt < max_attempts - 1:
-                    self.stdout.write(
-                        f"  Retry {attempt + 1}: Amazon returned CAPTCHA, rotating User-Agent..."
-                    )
                     continue
                 raise CommandError(
-                    "Amazon is showing CAPTCHA. Set SCRAPER_API_KEY in .env to bypass this."
+                    "Amazon returned CAPTCHA. Retrying with next topic..."
                 )
 
             # Parse the page
