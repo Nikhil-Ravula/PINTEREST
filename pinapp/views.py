@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import threading
+import time
 import urllib.parse
 
 import requests
@@ -116,6 +117,7 @@ def trigger_reminder_view(request):
     """
     HTTP endpoint to trigger the 'Ready for post?' Telegram check-in.
     Can be called by free external cron services (e.g. cron-job.org) every 30 minutes.
+    Includes retry with backoff to handle transient proxy blips on PythonAnywhere.
     """
     token = getattr(settings, "TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = getattr(settings, "TELEGRAM_CHAT_ID", "").strip()
@@ -139,15 +141,24 @@ def trigger_reminder_view(request):
             ]
         },
     }
-    try:
-        resp = requests.post(url, json=payload, timeout=15)
-        if resp.status_code == 200:
-            return JsonResponse({"status": "success", "message": "Reminder sent to Telegram"})
-        else:
-            return JsonResponse({"status": "error", "details": resp.text}, status=resp.status_code)
-    except Exception as exc:
-        logger.error(f"Failed to send reminder via trigger: {exc}")
-        return JsonResponse({"status": "error", "error": str(exc)}, status=500)
+
+    last_error = None
+    max_retries = 4
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(url, json=payload, timeout=20)
+            if resp.status_code == 200:
+                return JsonResponse({"status": "success", "message": "Reminder sent to Telegram"})
+            else:
+                last_error = f"HTTP {resp.status_code}: {resp.text}"
+        except requests.RequestException as exc:
+            last_error = str(exc)
+            if attempt < max_retries - 1:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+
+    logger.error(f"Failed to send reminder via trigger after {max_retries} attempts: {last_error}")
+    return JsonResponse({"status": "error", "error": str(last_error)}, status=502)
 
 
 # ── Pinterest OAuth2 Flow ──────────────────────────────────────────────────────
