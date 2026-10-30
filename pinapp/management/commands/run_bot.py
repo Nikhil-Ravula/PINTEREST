@@ -290,54 +290,20 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ACTIVE_SEARCHES = set()
 
 
-async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /new [category] — find 1 product and ask user for affiliate link."""
-    chat_id = str(update.effective_chat.id)
+async def execute_product_search(chat_id, reply_text, reply_photo, category=None, cat_label="random"):
+    """Execute product search, generate SEO copy, and present board selection."""
     if chat_id in ACTIVE_SEARCHES:
-        await update.message.reply_text(
+        await reply_text(
             "⏳ <b>A product search is already running!</b>\n"
             "Please wait a few seconds for your product to arrive before requesting another.",
             parse_mode=ParseMode.HTML,
         )
         return
 
-    category = None
-    cat_label = "random"
-
-    args = list(context.args) if context.args else []
-
-    if args:
-        resolved = _resolve_category(args[0])
-        if resolved:
-            category = resolved
-            cat_label = CATEGORIES[resolved]["label"]
-        elif len(args) >= 2:
-            resolved = _resolve_category(f"{args[0]} {args[1]}")
-            if resolved:
-                category = resolved
-                cat_label = CATEGORIES[resolved]["label"]
-            else:
-                cat_list = ", ".join(CATEGORIES.keys())
-                await update.message.reply_text(
-                    f"Unknown category: <b>{args[0]}</b>\n\n"
-                    f"Available: {cat_list}\n"
-                    f"Usage: /new [category]",
-                    parse_mode=ParseMode.HTML,
-                )
-                return
-        else:
-            cat_list = ", ".join(CATEGORIES.keys())
-            await update.message.reply_text(
-                f"Unknown category: <b>{args[0]}</b>\n\n"
-                f"Available: {cat_list}\n"
-                f"Usage: /new [category]",
-                parse_mode=ParseMode.HTML,
-            )
-            return
-
     ACTIVE_SEARCHES.add(chat_id)
-    status_msg = await update.message.reply_text(
-        f"🔍 Searching Amazon India for a fresh {cat_label} product...\nThis may take 15–25 seconds."
+    status_msg = await reply_text(
+        f"🔍 Searching Amazon India for a fresh <b>{CreatePinCommand._escape_html(cat_label)}</b> product...\nThis may take 15–25 seconds.",
+        parse_mode=ParseMode.HTML,
     )
 
     try:
@@ -400,7 +366,7 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 1. Send the product photo first
         photo_caption = f"🎯 <b>Product Found for Pin!</b>\n\n📦 <b>{short_title}...</b>"
         try:
-            await update.message.reply_photo(
+            await reply_photo(
                 photo=product["image_url"],
                 caption=photo_caption,
                 parse_mode=ParseMode.HTML,
@@ -408,7 +374,7 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             logger.warning(f"Could not send photo directly ({exc})")
 
-        # 2. Send the Amazon Link and Board Selection Menu as a new message directly below the photo
+        # 2. Send Amazon Link & Board Selection Menu as a new message directly below the photo
         menu_text = (
             f"🔗 <b>Amazon Link:</b>\n"
             f"{escaped_url}\n\n"
@@ -419,7 +385,7 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         try:
-            await update.message.reply_text(
+            await reply_text(
                 menu_text,
                 parse_mode=ParseMode.HTML,
                 reply_markup=markup,
@@ -427,7 +393,7 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as exc:
             logger.error(f"Error sending board menu: {exc}", exc_info=True)
-            await update.message.reply_text(
+            await reply_text(
                 f"🔗 Amazon Link:\n{product['url']}\n\n{board_menu_text}\n\n👉 Reply with board number or your affiliate link!",
                 reply_markup=markup,
             )
@@ -440,6 +406,100 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     finally:
         ACTIVE_SEARCHES.discard(chat_id)
+
+
+async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /new [category] — find 1 product and ask user for affiliate link."""
+    chat_id = str(update.effective_chat.id)
+    category = None
+    cat_label = "random"
+
+    args = list(context.args) if context.args else []
+
+    if args:
+        resolved = _resolve_category(args[0])
+        if resolved:
+            category = resolved
+            cat_label = CATEGORIES[resolved]["label"]
+        elif len(args) >= 2:
+            resolved = _resolve_category(f"{args[0]} {args[1]}")
+            if resolved:
+                category = resolved
+                cat_label = CATEGORIES[resolved]["label"]
+            else:
+                cat_list = ", ".join(CATEGORIES.keys())
+                await update.message.reply_text(
+                    f"Unknown category: <b>{args[0]}</b>\n\n"
+                    f"Available: {cat_list}\n"
+                    f"Usage: /new [category]",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+        else:
+            cat_list = ", ".join(CATEGORIES.keys())
+            await update.message.reply_text(
+                f"Unknown category: <b>{args[0]}</b>\n\n"
+                f"Available: {cat_list}\n"
+                f"Usage: /new [category]",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+    await execute_product_search(
+        chat_id=chat_id,
+        reply_text=update.message.reply_text,
+        reply_photo=update.message.reply_photo,
+        category=category,
+        cat_label=cat_label,
+    )
+
+
+def build_reminder_menu():
+    """Build the 'Ready for post?' interactive check-in with Yes/No buttons."""
+    text = (
+        "⏰ <b>Ready for a new Pinterest post?</b>\n\n"
+        "Would you like to discover a fresh trending product and create a Pin right now?"
+    )
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Yes, let's post!", callback_data="reminder_yes"),
+            InlineKeyboardButton("❌ No, not now", callback_data="reminder_no"),
+        ]
+    ]
+    return text, InlineKeyboardMarkup(keyboard)
+
+
+def build_topic_menu():
+    """Build category selection buttons when user says Yes to posting."""
+    text = (
+        "🎯 <b>Choose a category for your Pin:</b>\n\n"
+        "Tap a topic below, or choose <b>Any</b> to let me pick a trending product!"
+    )
+    keyboard = [
+        [
+            InlineKeyboardButton("📱 Phones", callback_data="topic_phones"),
+            InlineKeyboardButton("💻 Laptops", callback_data="topic_laptops"),
+        ],
+        [
+            InlineKeyboardButton("🔌 Phone Acc", callback_data="topic_phoneacc"),
+            InlineKeyboardButton("🎒 Laptop Acc", callback_data="topic_laptopacc"),
+        ],
+        [
+            InlineKeyboardButton("🛋️ Home Decor", callback_data="topic_homedecor"),
+            InlineKeyboardButton("🎲 Any / Surprise Me", callback_data="topic_any"),
+        ],
+    ]
+    return text, InlineKeyboardMarkup(keyboard)
+
+
+async def cmd_remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /remind — trigger the interactive 'Ready to post?' check-in."""
+    text, markup = build_reminder_menu()
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=markup,
+    )
 
 
 def build_board_menu(boards, ai_board):
@@ -467,45 +527,84 @@ def build_board_menu(boards, ai_board):
 
 
 async def handle_board_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle tap on inline board selection buttons."""
+    """Handle all button callbacks: check-in (yes/no), topics, and board selection."""
     query = update.callback_query
     await query.answer()
 
     data = query.data or ""
-    if not data.startswith("set_board_"):
-        return
-
     chat_id = str(query.message.chat.id)
-    idx_str = data.replace("set_board_", "")
-    boards = get_configured_boards()
 
-    def _update_board():
-        pending = PendingPin.objects.filter(chat_id=chat_id).first()
-        if not pending:
-            return None, None
-        if idx_str == "0":
-            chosen = pending.board_name
-        else:
-            try:
-                idx = int(idx_str) - 1
-                chosen = boards[idx]
-                pending.board_name = chosen
-                pending.save()
-            except (ValueError, IndexError):
-                chosen = pending.board_name
-        return pending, chosen
-
-    pending, chosen_board = await asyncio.to_thread(_update_board)
-    if not pending:
-        await query.message.reply_text("No active pending pin. Send /new to pick a product.")
+    # 1. Check-in: User clicked "No, not now"
+    if data == "reminder_no":
+        await query.edit_message_text(
+            "❌ <b>Post skipped.</b> I'll check back in later! (Send /new whenever you're ready).",
+            parse_mode=ParseMode.HTML,
+        )
         return
 
-    await query.message.reply_text(
-        f"✅ <b>Board selected:</b> {CreatePinCommand._escape_html(chosen_board)}\n\n"
-        f"👉 <b>Now reply with your Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>) to publish to Pinterest!\n\n"
-        f"<i>(Send /cancel to skip this product)</i>",
-        parse_mode=ParseMode.HTML,
-    )
+    # 2. Check-in: User clicked "Yes, let's post!"
+    if data == "reminder_yes":
+        text, markup = build_topic_menu()
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=markup,
+        )
+        return
+
+    # 3. Topic selection from check-in menu
+    if data.startswith("topic_"):
+        cat_key = data.replace("topic_", "")
+        category = None if cat_key == "any" else cat_key
+        cat_label = CATEGORIES.get(category, {}).get("label", "random") if category else "random"
+        await query.edit_message_text(
+            f"🎯 <b>Category selected:</b> {CreatePinCommand._escape_html(cat_label)}",
+            parse_mode=ParseMode.HTML,
+        )
+        await execute_product_search(
+            chat_id=chat_id,
+            reply_text=query.message.reply_text,
+            reply_photo=query.message.reply_photo,
+            category=category,
+            cat_label=cat_label,
+        )
+        return
+
+    # 4. Board selection (set_board_X)
+    if data.startswith("set_board_"):
+        idx_str = data.replace("set_board_", "")
+        boards = get_configured_boards()
+
+        def _update_board():
+            pending = PendingPin.objects.filter(chat_id=chat_id).first()
+            if not pending:
+                return None, None
+            if idx_str == "0":
+                chosen = pending.board_name
+            else:
+                try:
+                    idx = int(idx_str) - 1
+                    chosen = boards[idx]
+                    pending.board_name = chosen
+                    pending.save()
+                except (ValueError, IndexError):
+                    chosen = pending.board_name
+            return pending, chosen
+
+        pending, chosen_board = await asyncio.to_thread(_update_board)
+        if not pending:
+            await query.message.reply_text("No active pending pin. Send /new to pick a product.")
+            return
+
+        await query.message.reply_text(
+            f"✅ <b>Board selected:</b> {CreatePinCommand._escape_html(chosen_board)}\n\n"
+            f"👉 <b>Now reply with your Affiliate Link</b> (e.g. <code>https://amzn.to/...</code>) to publish to Pinterest!\n\n"
+            f"<i>(Send /cancel to skip this product)</i>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+handle_callback_query = handle_board_callback
 
 
 async def handle_affiliate_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -668,6 +767,7 @@ class Command(BaseCommand):
         app.add_handler(CommandHandler("cancel", cmd_cancel))
         app.add_handler(CommandHandler("stats", cmd_stats))
         app.add_handler(CommandHandler("reset", cmd_reset))
+        app.add_handler(CommandHandler("remind", cmd_remind))
         app.add_handler(CallbackQueryHandler(handle_board_callback))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_affiliate_link))
         app.add_error_handler(error_handler)

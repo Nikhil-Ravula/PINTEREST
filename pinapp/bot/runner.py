@@ -28,6 +28,7 @@ def build_bot_application() -> Application:
         cmd_cancel,
         cmd_stats,
         cmd_reset,
+        cmd_remind,
         handle_board_callback,
         handle_affiliate_link,
         error_handler,
@@ -45,6 +46,7 @@ def build_bot_application() -> Application:
     app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("remind", cmd_remind))
     app.add_handler(CallbackQueryHandler(handle_board_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_affiliate_link))
     app.add_error_handler(error_handler)
