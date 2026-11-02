@@ -360,11 +360,12 @@ async def execute_product_search(chat_id, reply_text, reply_photo, category=None
         boards = get_configured_boards()
         board_menu_text, markup = build_board_menu(boards, copy["board_name"])
 
-        short_title = CreatePinCommand._escape_html(product["title"][:120])
+        display_title = CreatePinCommand.clean_title(product["title"], max_chars=90)
+        escaped_title = CreatePinCommand._escape_html(display_title)
         escaped_url = CreatePinCommand._escape_html(product["url"])
 
         # 1. Send the product photo first
-        photo_caption = f"🎯 <b>Product Found for Pin!</b>\n\n📦 <b>{short_title}...</b>"
+        photo_caption = f"🎯 <b>Product Found for Pin!</b>\n\n📦 <b>{escaped_title}</b>"
         try:
             await reply_photo(
                 photo=product["image_url"],

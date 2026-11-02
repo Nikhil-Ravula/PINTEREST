@@ -94,11 +94,11 @@ Rules for the hashtags part (placed at the very end after a blank line):
 - Example: "Aesthetic Desk Setup Ideas" not "Stuff I Like".
 
 CRITICAL RULES:
-- Do NOT invent prices, discounts, reviews, ratings, or availability.
-- Use ONLY the supplied product data as your source of truth.
-- Ensure every field respects its character limit.
+- STRICTLY FORBIDDEN: Do NOT include prices (e.g. ₹, $, Rs), discounts, review ratings (e.g. 4.5/5), review counts, delivery dates, or bank/cashback card offers (e.g. ICICI, Amazon Pay) in ANY field.
+- STRICTLY FORBIDDEN: Do NOT use ellipses ('...', '..', '…') or cut off sentences with dots in any field.
+- Ensure every field respects its character limit and all sentences are complete and natural.
 - The description field MUST end with hashtags, and the last hashtag MUST be #ad.
-- The description MUST be between 750 and 800 characters. Pack in more hashtags if under 750.
+- The description MUST be between 700 and 800 characters. Pack in more hashtags if under 700.
 """.strip()
 
 
@@ -164,52 +164,166 @@ class Command(BaseCommand):
         match = re.search(r"/dp/([A-Za-z0-9]{10})(?:/|$)", url)
         return match.group(1) if match else None
 
+    @staticmethod
+    def clean_title(raw_title: str, max_chars: int = 60) -> str:
+        """
+        Produce a clean, human-readable product name without trailing dots,
+        seller keyword spam, duplicate punctuation, or awkward ellipses.
+        """
+        if not raw_title:
+            return "Trending Amazon Find"
+
+        # Remove unicode ellipses, consecutive periods, or existing dots
+        t = re.sub(r"[…]+", " ", str(raw_title))
+        t = re.sub(r"\.{2,}", " ", t)
+
+        # Normalize whitespace
+        t = re.sub(r"\s+", " ", t).strip()
+
+        # If title has multiple parts separated by | or - or – or :, take the most descriptive primary part
+        major_parts = re.split(r"\s+[|–—]\s+", t)
+        if major_parts and 20 <= len(major_parts[0].strip()) <= max_chars:
+            t = major_parts[0].strip()
+        else:
+            comma_parts = re.split(r",\s*", t)
+            if comma_parts and 20 <= len(comma_parts[0].strip()) <= max_chars:
+                t = comma_parts[0].strip()
+
+        t = t.rstrip(" ,-–—|:;.")
+        if len(t) > max_chars:
+            t = t[:max_chars].rsplit(" ", 1)[0].rstrip(" ,-–—|:;.")
+
+        # Strip dangling prepositions or conjunctions at end
+        t = re.sub(r"\b(for|with|and|or|in|on|at|to|a|an|the|of|by|from)\s*$", "", t, flags=re.IGNORECASE).rstrip(" ,-–—|:;.")
+        return t
+
     @classmethod
     def generate_fallback_copy(cls, product):
         """
         Generate high-quality Pinterest SEO copy directly from product data
         if Gemini API is experiencing 503 high demand or temporary downtime.
+        Guarantees clean, aesthetic copy with zero prices, ratings, delivery dates,
+        cashback offers, or ellipses (...).
         """
         raw_title = product.get("title", "Trending Amazon Find").strip()
-        clean_title = re.sub(r"\s+", " ", raw_title)
-        if len(clean_title) > 85:
-            clean_title = clean_title[:82].rsplit(" ", 1)[0] + "..."
-        pin_title = f"{clean_title}: Must-Have Deal"[:100]
+        clean_name = cls.clean_title(raw_title, max_chars=60)
 
-        features = product.get("features", "").strip()
-        feat_snippet = f" Highlights: {features[:180]}." if features else ""
+        # Categorize by niche
+        topic_str = f"{product.get('topic', '')} {clean_name} {raw_title}".lower()
 
-        topic_str = f"{product.get('topic', '')} {raw_title}".lower()
-        if any(w in topic_str for w in ["decor", "home", "living", "pillow", "cushion", "lamp", "curtain", "rug", "candle"]):
+        if any(w in topic_str for w in ["decor", "home", "living", "pillow", "cushion", "lamp", "curtain", "rug", "candle", "vase", "poster", "rack", "shelf"]):
             board_name = "Modern Home Decor"
-            hashtags = "#HomeDecor #AestheticHome #LivingRoomDecor #InteriorStyling #AmazonHome #HomeFinds #RoomMakeover"
-        elif any(w in topic_str for w in ["laptop", "macbook", "computer", "pc", "monitor", "keyboard", "mouse"]):
-            board_name = "Best Laptops & Reviews"
-            hashtags = "#BestLaptops #TechGadgets #WorkFromHome #Productivity #DeskSetup #AmazonTech #LaptopDeals"
-        elif any(w in topic_str for w in ["phone", "mobile", "charger", "magsafe", "earbuds", "audio", "case"]):
+            title_hook = "Aesthetic Modern Home Decor Idea"
+            intro = (
+                f"Elevate your living space with this gorgeous {clean_name}! "
+                f"Featuring a sleek modern aesthetic, it effortlessly brings cozy vibes, stylish charm, "
+                f"and functional elegance to any bedroom, living room, or apartment setup. "
+                f"Whether you are planning a room makeover or looking for a thoughtful gift, "
+                f"this piece adds the perfect aesthetic touch. "
+                f"Tap the link to explore more styling inspiration and get yours today!"
+            )
+            hashtags = (
+                "#HomeDecor #ModernHomeDecor #AestheticHome #LivingRoomDecor #InteriorStyling "
+                "#AmazonHome #RoomMakeover #CozyHomeVibes #HomeFinds #ApartmentTherapy "
+                "#HomeInspiration #DecorIdeas #TrendingHome #MustHaveDecor #AmazonFinds #ad"
+            )
+        elif any(w in topic_str for w in ["laptop", "macbook", "computer", "pc", "monitor", "keyboard", "mouse", "desk", "stand"]):
+            board_name = "Laptop Accessories & Setup" if any(w in topic_str for w in ["setup", "accessory", "stand", "mouse", "keyboard", "pad"]) else "Best Laptops & Reviews"
+            title_hook = "Must-Have Desk Setup & Tech Essential"
+            intro = (
+                f"Level up your workspace with this top-rated {clean_name}! "
+                f"Engineered for high performance, sleek comfort, and everyday productivity, "
+                f"it keeps your desk clutter-free and your workflow seamless. "
+                f"The ultimate essential for work-from-home pros, gamers, and students alike. "
+                f"Tap the link to check all the details and upgrade your desk setup today!"
+            )
+            hashtags = (
+                "#DeskSetup #WorkFromHome #ProductivitySetup #TechGadgets #LaptopAccessories "
+                "#DeskInspiration #MinimalistSetup #AmazonFinds #TechReview #WorkspaceGoals "
+                "#AmazonTech #OfficeDecor #SmartGadgets #DailyFinds #BestDeals #ad"
+            )
+        elif any(w in topic_str for w in ["phone", "mobile", "charger", "magsafe", "earbuds", "audio", "case", "cable", "headphone"]):
             board_name = "Mobile Accessories & Gadgets"
-            hashtags = "#PhoneAccessories #TechGadgets #MagSafe #AmazonFinds #SmartGadgets #MustHaveTech #MobileTech"
-        elif any(w in topic_str for w in ["watch", "smartwatch", "fitness"]):
+            title_hook = "Must-Have Smart Gadget & Mobile Tech"
+            intro = (
+                f"Never compromise on convenience with this innovative {clean_name}! "
+                f"Sleek, durable, and designed for effortless everyday use, it delivers reliable performance "
+                f"wherever you go. An essential upgrade for your mobile device that combines practicality with modern style. "
+                f"Tap the link to discover full specs and shop yours today!"
+            )
+            hashtags = (
+                "#MobileAccessories #TechGadgets #PhoneAccessories #SmartGadgets #AmazonFinds "
+                "#MustHaveTech #EverydayCarry #GadgetLovers #TechTrends #TrendingNow "
+                "#DailyTech #OnlineShopping #BestDeals #CoolGadgets #TechAddict #ad"
+            )
+        elif any(w in topic_str for w in ["watch", "smartwatch", "fitness", "band", "tracker"]):
             board_name = "Best Watches & Smartwatches"
-            hashtags = "#Smartwatches #WatchLovers #FitnessTracker #TechStyle #AmazonDeals #WristWatch"
-        elif any(w in topic_str for w in ["beauty", "skin", "makeup", "hair"]):
+            title_hook = "Chic Smartwatch & Timepiece Essential"
+            intro = (
+                f"Track your lifestyle in style with this stunning {clean_name}! "
+                f"Blending cutting-edge features with a premium aesthetic design, it is built to keep you connected, "
+                f"active, and fashionable all day long. Perfect for daily fitness tracking or styling with any outfit. "
+                f"Tap the link to view current availability and get yours now!"
+            )
+            hashtags = (
+                "#Smartwatches #WatchLovers #FitnessTracker #TechStyle #WristGame "
+                "#AmazonDeals #DailyStyle #SmartTech #FitnessGoals #ModernStyle "
+                "#TrendingNow #MustHaveGadgets #AmazonFinds #ProductReview #ad"
+            )
+        elif any(w in topic_str for w in ["beauty", "skin", "makeup", "hair", "fragrance", "perfume", "serum"]):
             board_name = "Summer Beauty & Fashion"
-            hashtags = "#BeautyFinds #SkincareRoutine #SummerBeauty #GlowUp #AmazonBeauty #SelfCare"
-        elif any(w in topic_str for w in ["dress", "outfit", "wear", "shoes", "fashion", "bag"]):
+            title_hook = "Glow-Up Beauty & Self-Care Essential"
+            intro = (
+                f"Pamper yourself with this viral beauty favorite: {clean_name}! "
+                f"Formulated to give you that effortless radiant glow, this essential fits seamlessly into "
+                f"your daily self-care and skincare regimen. Treat yourself to the pampering you deserve or gift it to someone special. "
+                f"Tap the link to reveal all the details and shop yours on Amazon today!"
+            )
+            hashtags = (
+                "#BeautyFinds #SkincareRoutine #SelfCareSunday #GlowUpTips #AmazonBeauty "
+                "#BeautyMustHaves #SkincareLovers #AestheticVibes #CleanBeauty #SummerGlow "
+                "#DailyRoutine #AmazonFinds #TrendingNow #BestDeals #ad"
+            )
+        elif any(w in topic_str for w in ["dress", "outfit", "wear", "shoes", "fashion", "bag", "jewelry"]):
             board_name = "Women Outfit Ideas"
-            hashtags = "#OutfitInspo #FashionTrends #StyleInspo #AmazonFashion #WardrobeEssentials #LookOfTheDay"
+            title_hook = "Chic Aesthetic Outfit Inspo"
+            intro = (
+                f"Step out in effortless style with this stunning {clean_name}! "
+                f"Designed with comfortable silhouettes and chic modern details, this piece makes outfit styling simple "
+                f"and versatile for everyday casual wear or special occasions. Elevate your wardrobe with this trending favorite. "
+                f"Tap the link to explore more styling looks and grab yours today!"
+            )
+            hashtags = (
+                "#OutfitInspo #FashionTrends #StyleInspo #AmazonFashion #WardrobeEssentials "
+                "#LookOfTheDay #OOTD #AestheticFashion #EverydayStyle #ChicStyle "
+                "#FashionAddict #TrendingNow #MustHaveFashion #DailyFinds #ad"
+            )
         else:
             board_name = "Mobile Accessories & Gadgets"
-            hashtags = "#AmazonFinds #TrendingDeals #MustHave #ViralProducts #DailyFinds #BestDeals"
+            title_hook = "Trending Amazon Find & Must-Have Deal"
+            intro = (
+                f"Discover why everyone is talking about this trending {clean_name}! "
+                f"A versatile and stylish pick crafted to bring ease, quality, and modern design to your daily routine. "
+                f"Whether treating yourself or searching for the perfect gift, this popular find is an absolute winner. "
+                f"Tap the link to check price and availability on Amazon today!"
+            )
+            hashtags = (
+                "#AmazonFinds #TrendingDeals #MustHave #ViralProducts #DailyFinds "
+                "#BestDeals #OnlineShopping #TrendingNow #SmartFinds #ShoppingHaul "
+                "#ProductReview #DailyMustHaves #AmazonHome #TechGadgets #ad"
+            )
 
-        description = (
-            f"Discover why this {clean_title} is trending right now! "
-            f"If you are looking to upgrade your setup or daily routine, this is the ultimate must-have pick."
-            f"{feat_snippet} Tap the link to check price and availability on Amazon! "
-            f"{hashtags} #TrendingNow #MustHaveGadgets #ad"
-        )[:800]
+        pin_title = f"{clean_name}: {title_hook}"
+        if len(pin_title) > 95:
+            pin_title = cls.clean_title(clean_name, max_chars=50) + f": {title_hook}"
+        pin_title = pin_title[:100].rstrip(" ,-–—|:;.")
 
-        alt_text = f"High-resolution product photo of {clean_title} showcasing modern design and details against clean background"[:500]
+        description = f"{intro}\n\n{hashtags}"[:800]
+
+        alt_text = (
+            f"High-resolution product photo of {clean_name} showcasing clean modern aesthetic design, "
+            f"premium finish, and elegant details against a clean background."
+        )[:500].rstrip(" ,-–—|:;.") + "."
 
         return {
             "title": pin_title,
@@ -232,21 +346,21 @@ class Command(BaseCommand):
             "Create Pinterest copy from this raw Amazon product data.\n"
             f"URL: {product['url']}\n"
             f"Title: {product['title']}\n"
-            f"Features: {product['features']}\n"
+            f"Features: {product.get('features', '')}\n"
             f"Image URL: {product['image_url']}"
         )
 
         try:
             client = genai.Client(
                 api_key=api_key,
-                http_options=types.HttpOptions(timeout=12000),
+                http_options=types.HttpOptions(timeout=25000),
             )
         except Exception as client_err:
             logger.warning(f"Failed to initialize Gemini client: {client_err}")
             client = None
 
         preferred_model = getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash")
-        candidate_models = [preferred_model, "gemini-3.5-flash", "gemini-flash-latest"]
+        candidate_models = [preferred_model, "gemini-flash-latest"]
         models_to_try = list(dict.fromkeys(candidate_models))
 
         copy = None
@@ -288,7 +402,7 @@ class Command(BaseCommand):
         return text
 
     # ------------------------------------------------------------------
-    # Validation (Auto-healing, never crashes on slight character overflows)
+    # Validation (Auto-healing, sanitizes dots, prices, and overflows)
     # ------------------------------------------------------------------
     @staticmethod
     def validate_copy(copy, product=None):
@@ -296,25 +410,56 @@ class Command(BaseCommand):
         for k in required_keys:
             if k not in copy or not str(copy[k]).strip():
                 if k == "title" and product:
-                    copy["title"] = product.get("title", "Trending Product")[:100]
+                    copy["title"] = CreatePinCommand.clean_title(product.get("title", "Trending Product"), max_chars=60)
                 elif k == "board_name":
-                    copy["board_name"] = "Amazon Finds"
+                    copy["board_name"] = "Modern Home Decor"
                 elif k == "alt_text":
-                    copy["alt_text"] = "Product image preview"
+                    copy["alt_text"] = "High-resolution product photo showcasing modern design and details against a clean background."
                 elif k == "description":
-                    copy["description"] = "Check out this trending product on Amazon! #AmazonFinds #Trending #ad"
+                    copy["description"] = "Discover this stunning trending product on Amazon! Tap the link to check details and shop today. #AmazonFinds #Trending #HomeDecor #ad"
+
+        # Sanitize all text fields from ellipses, repeated dots, and accidental scraper junk
+        junk_patterns = [
+            r"(?i)Price:\s*[₹$€£\d.,]+[^\.\n]*\.?",
+            r"(?i)Rating:\s*[\d.]+/5[^\.\n]*\.?",
+            r"(?i)FREE delivery[^\.\n]*\.?",
+            r"(?i)Or fastest delivery[^\.\n]*\.?",
+            r"(?i)Up to \d+% back[^\.\n]*\.?",
+            r"(?i)Amazon Pay[^\.\n]*\.?",
+            r"(?i)Save extra with Cashback[^\.\n]*\.?",
+            r"(?i)Trend topic:\s*[^.]+\.?",
+            r"(?i)Highlights:\s*",
+        ]
+
+        for field in ["title", "description", "alt_text"]:
+            val = str(copy.get(field, "")).strip()
+            # Remove unicode ellipses and consecutive dots
+            val = re.sub(r"[…]+", " ", val)
+            val = re.sub(r"\.{2,}", " ", val)
+            # Remove scraper junk if present in description
+            if field == "description":
+                for pat in junk_patterns:
+                    val = re.sub(pat, " ", val)
+            # Normalize whitespace
+            val = re.sub(r"\s+", " ", val).strip()
+            # Fix dangling punctuation before colons or commas
+            val = re.sub(r",\s*:", ":", val)
+            val = re.sub(r"\s+:", ":", val)
+            if field == "title":
+                val = val.rstrip(" ,-–—|:;.")
+            copy[field] = val
 
         limits = {"title": 100, "description": 800, "alt_text": 500}
         for field, limit in limits.items():
             val = str(copy.get(field, "")).strip()
             if len(val) > limit:
-                copy[field] = val[:limit]
+                copy[field] = val[:limit].rstrip(" ,-–—|:;.")
 
         # Ensure at least 3 hashtags and #ad
         desc = copy.get("description", "")
         hashtag_list = re.findall(r"(?<!\w)#([A-Za-z0-9_]+)", desc)
         if len(hashtag_list) < 3:
-            desc = (desc[:720] + " #AmazonFinds #Trending #TechGadgets #ad")
+            desc = (desc[:720] + " #AmazonFinds #Trending #HomeDecor #ad")
         if "#ad" not in desc:
             desc = (desc[:790] + " #ad")
         copy["description"] = desc[:800]

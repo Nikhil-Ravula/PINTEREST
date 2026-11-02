@@ -443,27 +443,31 @@ class Command(BaseCommand):
                 if count_text.isdigit():
                     review_count = count_text
 
-            # --- Extract features ---
+            # --- Extract clean features / attributes ---
             feature_nodes = result.select(".a-row.a-size-base.a-color-secondary")
-            features = " ".join(node.get_text(" ", strip=True) for node in feature_nodes)
-            if not features:
-                features = result.get_text(" ", strip=True)
-            features = re.sub(r"\s+", " ", features).strip()
+            raw_feature_text = " ".join(node.get_text(" ", strip=True) for node in feature_nodes)
+            if not raw_feature_text:
+                snippet_nodes = result.select("span.a-size-base-plus, h2 + div span")
+                raw_feature_text = " ".join(node.get_text(" ", strip=True) for node in snippet_nodes)
+
+            # Strip out price, delivery, card, cashback, sponsor junk
+            clean_feats = re.sub(r"(?i)(?:FREE delivery|delivery by|Arrives before|Or fastest delivery|Get it by)[^\.\n]*", "", raw_feature_text)
+            clean_feats = re.sub(r"(?i)(?:Up to \d+% back|Amazon Pay|ICICI|Cashback|Save extra)[^\.\n]*", "", clean_feats)
+            clean_feats = re.sub(r"(?i)(?:sponsored|ad\b|prime|eligible for|fulfilled by amazon)[^\.\n]*", "", clean_feats)
+            clean_feats = re.sub(r"[₹$€£]\s*[\d,]+(?:\.\d+)?", "", clean_feats)
+            clean_feats = re.sub(r"\d+\.?\d*\s*out of 5 stars", "", clean_feats)
+            clean_feats = re.sub(r"\.{2,}", " ", clean_feats)
+            clean_feats = re.sub(r"\s+", " ", clean_feats).strip()
 
             # Skip media products
-            searchable_text = f"{title} {features}".lower()
+            searchable_text = f"{title} {clean_feats}".lower()
             if any(re.search(rf"\b{re.escape(term)}\b", searchable_text) for term in self.MEDIA_TERMS):
                 continue
 
-            # Build enriched features string
-            enriched_features = f"Trend topic: {topic}."
-            if price:
-                enriched_features += f" Price: {price}."
-            if rating:
-                enriched_features += f" Rating: {rating}."
-            if review_count:
-                enriched_features += f" Reviews: {review_count}."
-            enriched_features += f" {features}"
+            # Pass clean semantic context (topic + product details only, NO raw pricing or delivery dates)
+            enriched_features = f"Category / Niche: {topic}."
+            if clean_feats:
+                enriched_features += f" Details: {clean_feats[:250]}."
 
             products.append({
                 "url": CreatePinCommand.clean_amazon_url(product_url),
