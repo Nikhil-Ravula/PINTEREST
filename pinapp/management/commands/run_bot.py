@@ -641,6 +641,12 @@ async def handle_affiliate_link(update: Update, context: ContextTypes.DEFAULT_TY
 
     pending = await asyncio.to_thread(_get_pending)
     if not pending:
+        if text.isdigit() or re.search(r"https?://[^\s]+", text):
+            await update.message.reply_text(
+                "⚠️ <b>No active product waiting.</b>\n"
+                "Please send <b>/new</b> to find a fresh product for Pinterest!",
+                parse_mode=ParseMode.HTML,
+            )
         return
 
     boards = get_configured_boards()
