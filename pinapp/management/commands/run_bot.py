@@ -174,21 +174,22 @@ def find_new_products(count, category=None):
     region = getattr(settings, "AMAZON_REGION", "US").upper()
     domain = AMAZON_DOMAINS.get(region, "www.amazon.com")
 
-    # Pick topics from the chosen category or all categories
+    # Pick topics: if category specified, use its topics; otherwise pick one random category
     if category and category in CATEGORIES:
         topics = list(CATEGORIES[category]["topics"])
     else:
-        topics = []
-        for cat in CATEGORIES.values():
-            topics.extend(cat["topics"])
+        chosen_cat = random.choice(list(CATEGORIES.keys()))
+        topics = list(CATEGORIES[chosen_cat]["topics"])
 
     random.shuffle(topics)
+    # Test at most 3 candidate topics to ensure fast responses and avoid hanging
+    topics = topics[:3]
 
     new_products = []
     seen_asins = set(sent_asins)  # Also track within this batch
 
-    # Fetch extra to have room after filtering out duplicates
-    per_topic_limit = min(count + len(sent_asins) + 10, 48)
+    # Fetch enough to have room after filtering out duplicates
+    per_topic_limit = min(count + len(sent_asins) + 5, 20)
 
     for topic in topics:
         if len(new_products) >= count:
@@ -287,12 +288,15 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-ACTIVE_SEARCHES = set()
+ACTIVE_SEARCHES = {}
 
 
 async def execute_product_search(chat_id, reply_text, reply_photo, category=None, cat_label="random"):
     """Execute product search, generate SEO copy, and present board selection."""
-    if chat_id in ACTIVE_SEARCHES:
+    now = time.time()
+    last_search = ACTIVE_SEARCHES.get(chat_id)
+    # If a search started less than 45 seconds ago, tell user to wait
+    if last_search and (now - last_search) < 45:
         await reply_text(
             "⏳ <b>A product search is already running!</b>\n"
             "Please wait a few seconds for your product to arrive before requesting another.",
@@ -300,15 +304,26 @@ async def execute_product_search(chat_id, reply_text, reply_photo, category=None
         )
         return
 
-    ACTIVE_SEARCHES.add(chat_id)
+    ACTIVE_SEARCHES[chat_id] = now
     status_msg = await reply_text(
-        f"🔍 Searching Amazon India for a fresh <b>{CreatePinCommand._escape_html(cat_label)}</b> product...\nThis may take 15–25 seconds.",
+        f"🔍 Searching Amazon India for a fresh <b>{CreatePinCommand._escape_html(cat_label)}</b> product...\nThis may take 10–20 seconds.",
         parse_mode=ParseMode.HTML,
     )
 
     try:
         try:
-            products = await asyncio.to_thread(find_new_products, 1, category)
+            products = await asyncio.wait_for(
+                asyncio.to_thread(find_new_products, 1, category),
+                timeout=35.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Amazon product search timed out after 35s for chat {chat_id}")
+            await status_msg.edit_text(
+                f"⚠️ Search for <b>{CreatePinCommand._escape_html(cat_label)}</b> took too long.\n\n"
+                f"Amazon India may be busy. Please tap a specific category like <b>Home Decor</b> or send <code>/new homedecor</code> to try again!",
+                parse_mode=ParseMode.HTML,
+            )
+            return
         except Exception as exc:
             logger.error(f"Error finding products: {exc}", exc_info=True)
             await status_msg.edit_text(f"Error finding products: {exc}")
@@ -317,7 +332,7 @@ async def execute_product_search(chat_id, reply_text, reply_photo, category=None
         if not products:
             await status_msg.edit_text(
                 f"Couldn't find any fresh {cat_label} products right now.\n"
-                "Amazon may be rate-limiting. Try again in a couple minutes."
+                "Amazon may be rate-limiting. Try selecting a specific category like <b>Home Decor</b> or send /new again."
             )
             return
 
@@ -406,12 +421,16 @@ async def execute_product_search(chat_id, reply_text, reply_photo, category=None
             pass
 
     finally:
-        ACTIVE_SEARCHES.discard(chat_id)
+        ACTIVE_SEARCHES.pop(chat_id, None)
 
 
 async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /new [category] — find 1 product and ask user for affiliate link."""
     chat_id = str(update.effective_chat.id)
+    # If a previous search was running for more than 30s, clear it so /new is immediately responsive
+    now = time.time()
+    if chat_id in ACTIVE_SEARCHES and (now - ACTIVE_SEARCHES[chat_id]) > 30:
+        ACTIVE_SEARCHES.pop(chat_id, None)
     category = None
     cat_label = "random"
 
@@ -732,7 +751,7 @@ async def handle_affiliate_link(update: Update, context: ContextTypes.DEFAULT_TY
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /cancel — discard active pending pin and stop active search."""
     chat_id = str(update.effective_chat.id)
-    ACTIVE_SEARCHES.discard(chat_id)
+    ACTIVE_SEARCHES.pop(chat_id, None)
 
     def _do_cancel():
         n = PendingPin.objects.filter(chat_id=chat_id).delete()

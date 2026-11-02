@@ -348,32 +348,22 @@ class Command(BaseCommand):
                 pass  # Fall through to direct requests
 
         # --- Direct requests fallback ---
-        max_attempts = 1 if scraper_url else 2
-        for attempt in range(max_attempts):
-            session = self._build_session()
-            try:
-                response = session.get(url, timeout=20)
-                response.raise_for_status()
-            except requests.RequestException as exc:
-                if attempt < max_attempts - 1:
-                    continue
-                raise CommandError(f"Could not fetch Amazon: {exc}") from exc
+        session = self._build_session()
+        try:
+            response = session.get(url, timeout=12)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise CommandError(f"Could not fetch Amazon: {exc}") from exc
 
-            if self._is_captcha_page(response.text):
-                if attempt < max_attempts - 1:
-                    continue
-                raise CommandError(
-                    "Amazon returned CAPTCHA. Retrying with next topic..."
-                )
+        if self._is_captcha_page(response.text):
+            raise CommandError(
+                "Amazon returned CAPTCHA. Retrying with next topic..."
+            )
 
-            # Parse the page
-            products = self._extract_products(response.text, topic, limit, domain)
-            if products:
-                return products
-
-            if attempt < max_attempts - 1:
-                self.stdout.write(f"  Retry {attempt + 1}: No products found, retrying...")
-                continue
+        # Parse the page
+        products = self._extract_products(response.text, topic, limit, domain)
+        if products:
+            return products
 
         raise CommandError(
             "Amazon returned no parseable products. Amazon may have blocked the request. "
