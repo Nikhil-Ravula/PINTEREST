@@ -94,6 +94,7 @@ def telegram_webhook_view(request):
         close_old_connections()
 
         async def _async_process():
+            app = None
             try:
                 app = build_bot_application()
                 await app.initialize()
@@ -102,6 +103,11 @@ def telegram_webhook_view(request):
             except Exception as exc:
                 logger.error("Error processing Telegram update: %s", exc, exc_info=True)
             finally:
+                if app:
+                    try:
+                        await app.shutdown()
+                    except Exception:
+                        pass
                 close_old_connections()
 
         asyncio.run(_async_process())
