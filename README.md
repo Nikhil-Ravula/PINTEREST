@@ -352,7 +352,9 @@ python-dotenv >= 1.0.0
 
 ## 📄 License
 
-This project is currently unlicensed. If you plan to distribute or reuse it publicly, add an appropriate open-source license.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+You are free to use, copy, modify, and distribute this project as long as you include the original copyright notice.
 
 ---
 
